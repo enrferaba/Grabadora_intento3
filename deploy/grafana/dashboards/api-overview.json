@@ -1,0 +1,32 @@
+{
+  "title": "Grabadora API Overview",
+  "panels": [
+    {
+      "type": "graph",
+      "title": "Request Latency",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(grabadora_request_duration_seconds_bucket[5m])) by (le))"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Queue Length",
+      "targets": [
+        {
+          "expr": "grabadora_queue_length"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "GPU Memory",
+      "targets": [
+        {
+          "expr": "grabadora_gpu_memory_usage_bytes"
+        }
+      ]
+    }
+  ]
+}
