@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import pytest
 import asyncio
 
 from app.main import _stream_job
@@ -45,19 +44,23 @@ class DummyRedis:
     pass
 
 
-@pytest.mark.asyncio
-async def test_stream_job_emits_delta_events(monkeypatch):
+def test_stream_job_emits_delta_events(monkeypatch):
     job = DummyJob()
 
     def fake_queue(name, connection):
         return DummyQueue(job)
 
     monkeypatch.setattr("app.main.Queue", fake_queue)
-    monkeypatch.setattr("app.main.asyncio.sleep", lambda _: asyncio.sleep(0))
+    original_sleep = asyncio.sleep
+    monkeypatch.setattr("app.main.asyncio.sleep", lambda _: original_sleep(0))
 
-    events = []
-    async for event in _stream_job("job1", DummyRedis()):
-        events.append(event)
+    async def run_stream():
+        events = []
+        async for event in _stream_job("job1", DummyRedis()):
+            events.append(event)
+        return events
+
+    events = asyncio.run(run_stream())
 
     delta_tokens = [item["data"] for item in events if item.get("event") == "delta"]
     assert delta_tokens == ["Hello", " "]

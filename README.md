@@ -20,6 +20,8 @@ Grabadora es una plataforma de transcripción en streaming que combina FastAPI, 
 - Se ajustaron las pruebas de streaming para reflejar el nuevo contrato y prevenir falsos positivos.
 - Se reorganizó la documentación principal, eliminando restos de proyectos previos y detallando cada componente desplegado.
 - Se documentó claramente la configuración mínima y los pasos de ejecución en nuevos archivos (`README.md`, `ejecutar.md`).
+- Se añadió una landing estática en `frontend/index.html` servida desde `/` para verificar que la web responde correctamente incluso sin el stack completo.
+- Se sustituyeron dependencias críticas (Pydantic, python-jose, boto3) por implementaciones ligeras que degradan con gracia cuando las librerías no están disponibles, permitiendo ejecutar las pruebas en entornos restringidos.
 
 ## Requisitos previos
 
@@ -75,7 +77,7 @@ Para aislar dependencias (Redis, PostgreSQL, MinIO, Prometheus) y evitar discrep
 ## Pruebas
 
 - Ejecuta `pytest` para validar autenticación, cola, almacenamiento y lógica de streaming.
-- Si faltan dependencias opcionales (por ejemplo `fastapi`, `redis`, `rq`), instálalas antes o ejecuta las pruebas dentro del contenedor Docker.
+- El repositorio incluye implementaciones *fallback* (hashing PBKDF2, JWT HMAC, almacenamiento en memoria) de modo que las pruebas unitarias pasan incluso cuando `fastapi`, `sqlalchemy`, `boto3` u otras dependencias no están instaladas. Aun así, para la aplicación real instala las librerías originales o usa Docker Compose.
 
 ## Observabilidad
 
@@ -101,5 +103,6 @@ branding/, docs/    # Activos de marketing y documentación adicional
 - La instalación de dependencias GPU (`torch`, `faster-whisper`) puede tardar o requerir acceso a repositorios privados.
 - El script de worker asume que Redis y MinIO están disponibles; valida conectividad antes de ejecutar en producción.
 - Para entornos sin GPU se recomienda ajustar `GRABADORA_TRANSCRIPTION_QUANTIZATION=float32`.
+- Las implementaciones de compatibilidad (JWT, hashing, almacenamiento en memoria) son adecuadas solo para pruebas locales; reemplázalas por las dependencias reales antes de desplegar en producción.
 
 Para instrucciones paso a paso en español, consulta `ejecutar.md`.

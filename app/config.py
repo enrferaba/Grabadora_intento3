@@ -1,55 +1,96 @@
-"""Application configuration using Pydantic settings."""
+"""Application configuration with a lightweight settings loader.
+
+This module intentionally avoids heavy optional dependencies so that the
+project remains usable in constrained execution environments (like the
+exercise runner). Environment variables using the ``GRABADORA_`` prefix can
+override the defaults defined below.
+"""
 from __future__ import annotations
 
+import os
+from dataclasses import dataclass, fields
 from functools import lru_cache
-from typing import Literal
-
-from pydantic import BaseSettings, Field
+from typing import Any, Literal, get_args, get_origin
 
 
-class Settings(BaseSettings):
+def _coerce(value: str, annotation: Any) -> Any:
+    """Best-effort coercion of environment variable values."""
+
+    origin = get_origin(annotation)
+    if origin is Literal:
+        # literals are strings in our settings; trust the env override.
+        return value
+
+    if annotation in (str, Any):
+        return value
+    if annotation in (int, float):
+        return annotation(value)
+    if annotation is bool:
+        return value.lower() in {"1", "true", "yes", "on"}
+
+    if origin is list and get_args(annotation):  # pragma: no cover - unused today
+        subtype = get_args(annotation)[0]
+        return [
+            _coerce(item.strip(), subtype)
+            for item in value.split(",")
+            if item.strip()
+        ]
+
+    return value
+
+
+@dataclass
+class Settings:
     """Central configuration for the transcription platform."""
 
-    api_title: str = Field("Grabadora", description="API title exposed by FastAPI.")
-    api_version: str = Field("0.1.0", description="Semantic version of the API.")
-    api_description: str = Field(
-        "Streaming transcription service with queue, storage, and metrics.",
-        description="Metadata description used by the OpenAPI schema.",
+    api_title: str = "Grabadora"
+    api_version: str = "0.1.0"
+    api_description: str = (
+        "Streaming transcription service with queue, storage, and metrics."
     )
 
-    redis_url: str = Field("redis://redis:6379/0", description="Redis connection URL.")
-    rq_default_queue: str = Field("transcription", description="Name of the default RQ queue.")
+    redis_url: str = "redis://redis:6379/0"
+    rq_default_queue: str = "transcription"
 
-    database_url: str = Field(
-        "postgresql+psycopg2://postgres:postgres@db:5432/grabadora",
-        description="SQLAlchemy-compatible database URL for PostgreSQL/MariaDB.",
+    database_url: str = (
+        "postgresql+psycopg2://postgres:postgres@db:5432/grabadora"
     )
 
-    s3_endpoint_url: str = Field("http://minio:9000", description="Endpoint for S3/MinIO service.")
-    s3_region_name: str = Field("us-east-1", description="Region name for S3-compatible services.")
-    s3_access_key: str = Field("minioadmin", description="S3 access key.")
-    s3_secret_key: str = Field("minioadmin", description="S3 secret key.")
-    s3_bucket_audio: str = Field("audio", description="Bucket used to store uploaded audio files.")
-    s3_bucket_transcripts: str = Field("transcripts", description="Bucket used to store final transcript payloads.")
+    s3_endpoint_url: str = "http://minio:9000"
+    s3_region_name: str = "us-east-1"
+    s3_access_key: str = "minioadmin"
+    s3_secret_key: str = "minioadmin"
+    s3_bucket_audio: str = "audio"
+    s3_bucket_transcripts: str = "transcripts"
 
-    jwt_secret_key: str = Field("super-secret", description="Secret used to sign JWT tokens.")
-    jwt_algorithm: str = Field("HS256", description="Algorithm used to sign JWT tokens.")
-    jwt_expiration_minutes: int = Field(30, description="Default JWT expiration window in minutes.")
+    jwt_secret_key: str = "super-secret"
+    jwt_algorithm: str = "HS256"
+    jwt_expiration_minutes: int = 30
 
-    transcription_quantization: Literal["float32", "float16", "int8"] = Field(
-        "float16",
-        description="Default quantization level used by faster-whisper.",
-    )
+    transcription_quantization: Literal["float32", "float16", "int8"] = "float16"
 
-    prometheus_namespace: str = Field("grabadora", description="Prometheus metric namespace.")
+    prometheus_namespace: str = "grabadora"
 
-    class Config:
-        env_prefix = "GRABADORA_"
-        case_sensitive = False
+    _env_prefix: str = "GRABADORA_"
+
+    def __post_init__(self) -> None:
+        for field in fields(self):
+            if field.name.startswith("_"):
+                continue
+            env_name = f"{self._env_prefix}{field.name.upper()}"
+            raw_value = os.getenv(env_name)
+            if raw_value is None:
+                continue
+            try:
+                value = _coerce(raw_value, field.type)
+            except Exception:
+                # fall back to the raw string if coercion fails.
+                value = raw_value
+            setattr(self, field.name, value)
 
 
 @lru_cache()
 def get_settings() -> Settings:
-    """Return cached settings instance."""
+    """Return a cached ``Settings`` instance."""
 
     return Settings()
