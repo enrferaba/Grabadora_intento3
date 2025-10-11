@@ -105,13 +105,14 @@ from storage.s3 import S3StorageClient
 settings = get_settings()
 
 logging.basicConfig(level=logging.INFO)
-structlog.configure(
-    processors=[
+processors = []
+if hasattr(structlog, "processors"):
+    processors = [
         structlog.processors.TimeStamper(fmt="iso"),
         structlog.processors.add_log_level,
         structlog.processors.JSONRenderer(),
-    ],
-)
+    ]
+structlog.configure(processors=processors)
 logger = structlog.get_logger(__name__)
 
 app = FastAPI(title=settings.api_title, version=settings.api_version, description=settings.api_description)

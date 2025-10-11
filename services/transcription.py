@@ -30,20 +30,30 @@ class TranscriptionService:
         model_size: str = "medium",
         quantization: Quantization = "float16",
         device: str = "auto",
+        model_factory: Optional[Callable[..., WhisperModel]] = None,
     ) -> None:
         self.model_size = model_size
         self.quantization = quantization
         self.device = device
+        self._model_factory = model_factory
         self._model: Optional[WhisperModel] = None
+        # validate quantization eagerly to fail-fast in misconfigured environments
+        self._map_quantization(self.quantization)
 
     @property
     def model(self) -> WhisperModel:
         if self._model is None:
             compute_type = self._map_quantization(self.quantization)
-            if _WhisperModel is None:  # pragma: no cover - dependency not installed
-                raise RuntimeError("faster-whisper is not installed")
-            logger.info("Loading faster-whisper model", extra={"model": self.model_size, "compute_type": compute_type})
-            self._model = _WhisperModel(self.model_size, device=self.device, compute_type=compute_type)
+            factory = self._model_factory
+            if factory is None:
+                if _WhisperModel is None:  # pragma: no cover - dependency not installed
+                    raise RuntimeError("faster-whisper is not installed")
+                factory = _WhisperModel
+            logger.info(
+                "Loading faster-whisper model",
+                extra={"model": self.model_size, "compute_type": compute_type},
+            )
+            self._model = factory(self.model_size, device=self.device, compute_type=compute_type)
         return self._model
 
     @staticmethod

@@ -42,7 +42,11 @@ Consulta `app/config.py` para la lista completa y descripciones.
 
 ## Puesta en marcha rápida
 
-### Desarrollo local con Poetry
+### ¿Docker o entorno local?
+
+Para aislar dependencias (Redis, PostgreSQL, MinIO, Prometheus) y evitar discrepancias en librerías GPU, la opción más estable es ejecutar todo con **Docker Compose**. Esto garantiza que tanto la API como el worker utilicen las mismas versiones de CUDA, `faster-whisper` y drivers de sistema. Si solo necesitas hacer desarrollos rápidos en CPU puedes optar por instalar las dependencias localmente, pero tendrás que provisionar los servicios externos manualmente.
+
+### Desarrollo local con Poetry (solo si ya cuentas con los servicios externos)
 
 1. Crea y activa un entorno virtual.
 2. Instala dependencias: `poetry install`.
@@ -51,10 +55,10 @@ Consulta `app/config.py` para la lista completa y descripciones.
 5. Levanta la API: `uvicorn app.main:app --reload`.
 6. Inicia el worker en otra terminal: `rq worker transcription --url $GRABADORA_REDIS_URL`.
 
-### Stack completo con Docker Compose
+### Stack completo con Docker Compose (recomendado)
 
 1. Copia `.env.example` a `.env` y ajusta valores (S3, JWT, etc.).
-2. `docker compose up --build`.
+2. Ejecuta `docker compose up --build`.
 3. El compose incluye servicios para API, worker, Redis, PostgreSQL, MinIO, Prometheus y Grafana.
 
 ## Uso de la API

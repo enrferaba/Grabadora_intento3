@@ -23,7 +23,7 @@ class DummySegment:
 
 class DummyModel:
     def __init__(self, *args, **kwargs) -> None:
-        self.calls = []
+        self.calls = [(args, kwargs)]
 
     def transcribe(self, path: str, language: str | None = None):
         segments = [DummySegment("Hi"), DummySegment("!")]
@@ -32,8 +32,7 @@ class DummyModel:
 
 
 def test_transcription_streams_delta_tokens(monkeypatch):
-    monkeypatch.setattr("services.transcription.WhisperModel", DummyModel)
-    service = TranscriptionService(quantization="float16")
+    service = TranscriptionService(quantization="float16", model_factory=lambda *args, **kwargs: DummyModel(*args, **kwargs))
 
     tokens: list[str] = []
     result = service.transcribe(Path("dummy.wav"), token_callback=tokens.append)
