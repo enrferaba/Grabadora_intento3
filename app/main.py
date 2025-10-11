@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import uuid
 from datetime import datetime
 from typing import AsyncGenerator, Dict, Optional
+
+import json
 
 try:  # pragma: no cover - optional dependency
     import structlog
@@ -174,11 +175,11 @@ async def create_user(payload: UserCreate) -> UserRead:
         return UserRead.from_orm(user)
 
 
-async def _stream_job(job_id: str, redis: Redis) -> AsyncGenerator[str, None]:
+async def _stream_job(job_id: str, redis: Redis) -> AsyncGenerator[Dict[str, str], None]:
     queue = Queue(name=settings.rq_default_queue, connection=redis)
     job = queue.fetch_job(job_id)
     if job is None:
-        yield json.dumps({"event": "error", "data": "job-not-found"})
+        yield {"event": "error", "data": "job-not-found"}
         return
 
     last_progress = 0
@@ -190,19 +191,19 @@ async def _stream_job(job_id: str, redis: Redis) -> AsyncGenerator[str, None]:
         _sample_gpu_usage()
         if meta.get("progress", 0) > last_progress and meta.get("last_token"):
             last_progress = meta["progress"]
-            payload = json.dumps({"event": "delta", "data": meta["last_token"]})
-            yield payload
+            yield {"event": "delta", "data": meta["last_token"]}
         if meta.get("status") == "completed":
-            data = {
-                "event": "completed",
-                "job_id": job.id,
-                "transcript_key": meta.get("transcript_key"),
-                "language": meta.get("language"),
-            }
-            yield json.dumps(data)
+            payload = json.dumps(
+                {
+                    "job_id": job.id,
+                    "transcript_key": meta.get("transcript_key"),
+                    "language": meta.get("language"),
+                }
+            )
+            yield {"event": "completed", "data": payload}
             break
         if status == "failed":
-            yield json.dumps({"event": "error", "job_id": job.id})
+            yield {"event": "error", "data": job.id}
             break
         await asyncio.sleep(0.5)
 
@@ -237,7 +238,7 @@ async def create_transcription_job(
 async def stream_transcription(job_id: str, user: User = Depends(get_current_user)) -> EventSourceResponse:
     redis = Redis.from_url(settings.redis_url)
 
-    async def event_generator() -> AsyncGenerator[str, None]:
+    async def event_generator() -> AsyncGenerator[Dict[str, str], None]:
         async for event in _stream_job(job_id, redis):
             yield event
 

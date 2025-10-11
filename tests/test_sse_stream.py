@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import pytest
-import json
-
 import asyncio
 
 from app.main import _stream_job
@@ -61,7 +59,6 @@ async def test_stream_job_emits_delta_events(monkeypatch):
     async for event in _stream_job("job1", DummyRedis()):
         events.append(event)
 
-    payloads = [json.loads(e) for e in events]
-    delta_tokens = [item["data"] for item in payloads if item.get("event") == "delta"]
+    delta_tokens = [item["data"] for item in events if item.get("event") == "delta"]
     assert delta_tokens == ["Hello", " "]
-    assert any(item.get("event") == "completed" for item in payloads)
+    assert any(item.get("event") == "completed" for item in events)
