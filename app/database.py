@@ -17,16 +17,33 @@ except ImportError:  # pragma: no cover
 else:
     from app.config import get_settings
 
-    settings = get_settings()
+    _session_factory: sessionmaker | None = None
+    _session_error: Exception | None = None
 
-    engine = create_engine(settings.database_url, pool_pre_ping=True, future=True)
-    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+    def _ensure_session_factory() -> None:
+        """Create the SQLAlchemy session factory on demand."""
+
+        global _session_factory, _session_error
+        if _session_factory is not None or _session_error is not None:
+            return
+        settings = get_settings()
+        try:
+            engine = create_engine(settings.database_url, pool_pre_ping=True, future=True)
+            _session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+        except ModuleNotFoundError as exc:  # pragma: no cover - driver missing
+            _session_error = exc
 
     @contextmanager
     def session_scope() -> Session:
         """Provide a transactional scope around a series of operations."""
 
-        session: Session = SessionLocal()
+        _ensure_session_factory()
+        if _session_error is not None:
+            raise RuntimeError(
+                "Database driver not installed. Install psycopg2-binary or configure DATABASE_URL",
+            ) from _session_error
+        assert _session_factory is not None  # narrow type for mypy
+        session: Session = _session_factory()
         try:
             yield session
             session.commit()

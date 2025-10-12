@@ -54,9 +54,14 @@ except ImportError:  # pragma: no cover
 try:  # pragma: no cover - optional dependency
     from sse_starlette.sse import EventSourceResponse
 except ImportError:  # pragma: no cover
-    class EventSourceResponse:  # type: ignore
+    class EventSourceResponse(JSONResponse):  # type: ignore[misc]
+        media_type = "text/event-stream"
+
         def __init__(self, *args, **kwargs) -> None:
-            raise RuntimeError("sse-starlette must be installed to stream events")
+            super().__init__(
+                {"detail": "sse-starlette must be installed to stream events"},
+                status_code=500,
+            )
 
 try:  # pragma: no cover - optional dependency
     from prometheus_client import Counter, Gauge
@@ -131,7 +136,7 @@ except ImportError:  # pragma: no cover
             self.id = 0
             self.email = ""
             self.profiles: list = []
-from queue import tasks
+from taskqueue import tasks
 from storage.s3 import S3StorageClient
 
 settings = get_settings()

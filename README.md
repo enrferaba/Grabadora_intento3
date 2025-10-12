@@ -22,6 +22,7 @@ Grabadora es una plataforma de transcripción en streaming que combina FastAPI, 
 - Se documentó claramente la configuración mínima y los pasos de ejecución en nuevos archivos (`README.md`, `ejecutar.md`).
 - Se añadió una landing estática en `frontend/index.html` servida desde `/` para verificar que la web responde correctamente incluso sin el stack completo.
 - Se sustituyeron dependencias críticas (Pydantic, python-jose, boto3) por implementaciones ligeras que degradan con gracia cuando las librerías no están disponibles, permitiendo ejecutar las pruebas en entornos restringidos.
+- Se añadió un parche de compatibilidad con Python 3.12 para Pydantic v1 y se renombró el paquete `queue/` a `taskqueue/` para evitar choques con la librería estándar.
 
 ## Requisitos previos
 
@@ -63,6 +64,14 @@ Para aislar dependencias (Redis, PostgreSQL, MinIO, Prometheus) y evitar discrep
 2. Ejecuta `docker compose up --build`.
 3. El compose incluye servicios para API, worker, Redis, PostgreSQL, MinIO, Prometheus y Grafana.
 
+### Acceso a la interfaz web y paneles
+
+- **Landing web**: abre `http://localhost:8000/` (sirve `frontend/index.html`).
+- **Documentación interactiva**: `http://localhost:8000/docs` (Swagger UI) o `http://localhost:8000/redoc`.
+- **Prometheus**: disponible en `http://localhost:9090/` cuando usas Docker Compose.
+- **Grafana**: visita `http://localhost:3000/` y añade Prometheus como fuente con la URL `http://prometheus:9090`.
+- **MinIO Console**: `http://localhost:9001/` para inspeccionar buckets de audio y transcripts.
+
 ## Uso de la API
 
 1. Crea un usuario vía `POST /users` (JSON: `{"email": "...", "password": "..."}`).
@@ -91,7 +100,7 @@ Para aislar dependencias (Redis, PostgreSQL, MinIO, Prometheus) y evitar discrep
 ```
 app/                # Aplicación FastAPI y dependencias
 services/           # Servicios de dominio (p.ej. transcripción)
-queue/              # Tareas RQ y worker
+taskqueue/          # Tareas RQ y worker
 storage/            # Clientes de almacenamiento
 models/, alembic/   # Modelado de datos y migraciones
 deploy/             # Prometheus/Grafana y utilidades de despliegue

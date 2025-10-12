@@ -52,6 +52,48 @@
         transform: translateY(-2px);
         box-shadow: 0 18px 36px rgba(255, 107, 107, 0.4);
       }
+      .cta.secondary {
+        background: transparent;
+        color: #f1faee;
+        border: 1px solid rgba(241, 250, 238, 0.6);
+        box-shadow: none;
+      }
+      .cta.secondary:hover {
+        background: rgba(241, 250, 238, 0.1);
+        box-shadow: none;
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 20px;
+      }
+      .instructions,
+      .features {
+        margin-top: 32px;
+        background: rgba(6, 12, 24, 0.55);
+        border-radius: 12px;
+        padding: 20px 24px;
+      }
+      .instructions h2,
+      .features h2 {
+        margin-top: 0;
+        font-size: 1.3rem;
+      }
+      ol,
+      ul {
+        margin: 0;
+        padding-left: 20px;
+        display: grid;
+        gap: 8px;
+      }
+      code {
+        background: rgba(241, 250, 238, 0.1);
+        padding: 2px 6px;
+        border-radius: 6px;
+        font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        font-size: 0.85rem;
+      }
       footer {
         margin-top: 32px;
         font-size: 0.85rem;
@@ -61,16 +103,38 @@
   </head>
   <body>
     <main class="card">
-      <h1>Grabadora</h1>
-      <p>
-        Plataforma unificada para transcripciones en tiempo real con colas, almacenamiento seguro y métricas listas para producción.
-        Conéctate mediante nuestra API SSE para recibir tokens de texto al instante mientras la IA procesa tu audio.
-      </p>
-      <a class="cta" href="https://github.com/" target="_blank" rel="noopener">
-        Ver documentación
-      </a>
+      <header>
+        <h1>Grabadora</h1>
+        <p>
+          Plataforma unificada para transcripciones en tiempo real con colas Redis, almacenamiento S3 y métricas listas para
+          producción. Recibe deltas de texto al instante mientras la IA procesa tu audio.
+        </p>
+        <div class="actions">
+          <a class="cta" href="/docs" rel="noopener">Abrir API Docs</a>
+          <a class="cta secondary" href="/redoc" rel="noopener">Vista Redoc</a>
+        </div>
+      </header>
+
+      <section class="instructions">
+        <h2>Cómo verla en acción</h2>
+        <ol>
+          <li>Levanta la plataforma con <code>docker compose up --build</code>.</li>
+          <li>Abre <code>http://localhost:8000/</code> para esta landing y <code>/docs</code> para la API interactiva.</li>
+          <li>Crea un usuario, solicita un token y sube audio en <strong>/transcribe</strong> para seguir el SSE en <strong>/transcribe/&lt;job_id&gt;</strong>.</li>
+        </ol>
+      </section>
+
+      <section class="features">
+        <h2>Qué incluye</h2>
+        <ul>
+          <li>Streaming SSE de tokens delta impulsado por faster-whisper con cuantización configurable.</li>
+          <li>Colas RQ sobre Redis con persistencia en MinIO/S3 de audios y transcripciones.</li>
+          <li>Métricas Prometheus y dashboards listos para Grafana en <code>deploy/grafana/</code>.</li>
+        </ul>
+      </section>
+
       <footer>
-        Docker Compose orquesta API, worker, Redis, base de datos y MinIO en cuestión de segundos.
+        Consulta <code>README.md</code> y <code>docs/</code> para la guía completa de despliegue, monitoreo y branding.
       </footer>
     </main>
   </body>

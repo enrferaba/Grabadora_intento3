@@ -6,6 +6,10 @@ from typing import List, Optional
 
 try:  # pragma: no cover - optional dependency
     from pydantic import BaseModel, EmailStr
+    try:  # pragma: no cover - optional dependency
+        import email_validator  # type: ignore
+    except ImportError:  # pragma: no cover
+        EmailStr = str  # type: ignore
 except ImportError:  # pragma: no cover
     EmailStr = str  # type: ignore
 

@@ -14,6 +14,7 @@ class User(Base):
     """Primary account holder with credential metadata."""
 
     __tablename__ = "users"
+    __allow_unmapped__ = True
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     email = Column(String(255), unique=True, nullable=False, index=True)
@@ -31,6 +32,7 @@ class Profile(Base):
     """Profile scoped within a user account, enabling multi-voice/purpose usage."""
 
     __tablename__ = "profiles"
+    __allow_unmapped__ = True
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -48,6 +50,7 @@ class UsageMeter(Base):
     """Tracks per-user and per-profile resource consumption for dashboards."""
 
     __tablename__ = "usage_meters"
+    __allow_unmapped__ = True
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)

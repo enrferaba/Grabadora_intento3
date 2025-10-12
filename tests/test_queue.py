@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from queue import tasks
+from taskqueue import tasks
 
 
 class DummyStorage:
@@ -50,10 +50,10 @@ class DummyJob:
 
 @pytest.fixture(autouse=True)
 def patch_dependencies(monkeypatch):
-    monkeypatch.setattr("queue.tasks.S3StorageClient", lambda: DummyStorage())
-    monkeypatch.setattr("queue.tasks.TranscriptionService", lambda **kwargs: DummyTranscriber())
+    monkeypatch.setattr("taskqueue.tasks.S3StorageClient", lambda: DummyStorage())
+    monkeypatch.setattr("taskqueue.tasks.TranscriptionService", lambda **kwargs: DummyTranscriber())
     job = DummyJob()
-    monkeypatch.setattr("queue.tasks.get_current_job", lambda: job)
+    monkeypatch.setattr("taskqueue.tasks.get_current_job", lambda: job)
     yield job
 
 
