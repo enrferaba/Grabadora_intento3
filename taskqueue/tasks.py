@@ -4,14 +4,14 @@ from __future__ import annotations
 import json
 import logging
 import tempfile
+from contextvars import ContextVar
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 try:  # pragma: no cover - optional dependency
-    from rq import get_current_job
+    from rq import get_current_job as rq_get_current_job
 except ImportError:  # pragma: no cover
-    def get_current_job():  # type: ignore
-        return None
+    rq_get_current_job = None
 
 from app.config import get_settings
 from app.database import session_scope
@@ -20,6 +20,28 @@ from services.transcription import TranscriptionService
 from storage.s3 import S3StorageClient
 
 logger = logging.getLogger(__name__)
+
+
+_current_job_ctx: ContextVar[Any | None] = ContextVar("grabadora_current_job", default=None)
+
+
+def set_current_job(job: Any | None) -> None:
+    _current_job_ctx.set(job)
+
+
+def clear_current_job() -> None:
+    _current_job_ctx.set(None)
+
+
+def get_current_job():  # type: ignore[override]
+    if rq_get_current_job is not None:  # pragma: no branch - small helper
+        try:
+            job = rq_get_current_job()
+            if job is not None:
+                return job
+        except Exception:  # pragma: no cover - defensive when Redis is down
+            pass
+    return _current_job_ctx.get()
 
 
 def _update_job_meta(meta: dict) -> None:

@@ -13,6 +13,8 @@ const elements = {
   streamOutput: document.getElementById("stream-output"),
   streamStatus: document.getElementById("stream-status"),
   streamText: document.getElementById("stream-text"),
+  streamCancel: document.querySelector('[data-action="cancel-stream"]'),
+  streamLibrary: document.querySelector('[data-action="view-library"]'),
   uploadProgress: document.getElementById("upload-progress"),
   toast: document.getElementById("toast"),
   accountEmail: document.getElementById("account-email"),
@@ -226,16 +228,24 @@ function showToast(message, { tone = "info" } = {}) {
   }, 3500);
 }
 
-function resetStream() {
+function resetStream({ preserveStatus = false } = {}) {
   if (state.streamController) {
     state.streamController.abort();
   }
   state.streamController = null;
   state.activeJob = null;
-  elements.streamText.textContent = "";
-  elements.streamStatus.textContent = "Esperando";
-  elements.streamStatus.className = "chip";
-  elements.streamOutput.hidden = true;
+  if (!preserveStatus) {
+    elements.streamStatus.textContent = "Esperando";
+    elements.streamStatus.className = "chip";
+  }
+  elements.streamText.textContent = "Tu transcripción aparecerá aquí en cuanto empiece el stream.";
+  elements.streamOutput.dataset.state = "idle";
+  if (elements.streamCancel) {
+    elements.streamCancel.disabled = true;
+  }
+  if (elements.streamLibrary) {
+    elements.streamLibrary.disabled = true;
+  }
 }
 
 async function uploadAudio(formData, { onProgress } = {}) {
@@ -269,13 +279,20 @@ function updateProgress(value) {
 }
 
 async function streamTranscription(jobId) {
-  resetStream();
-  elements.streamOutput.hidden = false;
+  resetStream({ preserveStatus: true });
+  elements.streamOutput.dataset.state = "streaming";
+  elements.streamText.textContent = "";
   elements.streamStatus.textContent = "Procesando";
   elements.streamStatus.className = "chip chip--info";
   state.activeJob = jobId;
   const controller = new AbortController();
   state.streamController = controller;
+  if (elements.streamCancel) {
+    elements.streamCancel.disabled = false;
+  }
+  if (elements.streamLibrary) {
+    elements.streamLibrary.disabled = true;
+  }
   try {
     const response = await fetch(`${API_BASE}/transcribe/${jobId}`, {
       headers: state.token ? { Authorization: `Bearer ${state.token}` } : {},
@@ -301,11 +318,22 @@ async function streamTranscription(jobId) {
     if (controller.signal.aborted) {
       elements.streamStatus.textContent = "Cancelado";
       elements.streamStatus.className = "chip";
+      elements.streamOutput.dataset.state = "idle";
+      if (elements.streamCancel) {
+        elements.streamCancel.disabled = true;
+      }
     } else {
       console.error(error);
       elements.streamStatus.textContent = "Error";
       elements.streamStatus.className = "chip";
       showToast(error.message || "Error en el stream", { tone: "error" });
+      elements.streamOutput.dataset.state = "error";
+      if (elements.streamCancel) {
+        elements.streamCancel.disabled = true;
+      }
+      if (elements.streamLibrary) {
+        elements.streamLibrary.disabled = false;
+      }
     }
   }
 }
@@ -339,6 +367,13 @@ function handleStreamEvent(raw) {
       const payload = JSON.parse(payloadText);
       elements.streamStatus.textContent = "Completado";
       elements.streamStatus.className = "chip chip--success";
+      elements.streamOutput.dataset.state = "completed";
+      if (elements.streamCancel) {
+        elements.streamCancel.disabled = true;
+      }
+      if (elements.streamLibrary) {
+        elements.streamLibrary.disabled = false;
+      }
       showToast("Transcripción lista en tu biblioteca");
       refreshLibrary();
       if (payload.quality_profile) {
@@ -357,6 +392,13 @@ function handleStreamEvent(raw) {
     }
     elements.streamStatus.textContent = "Error";
     elements.streamStatus.className = "chip";
+    elements.streamOutput.dataset.state = "error";
+    if (elements.streamCancel) {
+      elements.streamCancel.disabled = true;
+    }
+    if (elements.streamLibrary) {
+      elements.streamLibrary.disabled = false;
+    }
     showToast(detail || "Fallo en la transcripción", { tone: "error" });
   }
 }
@@ -655,15 +697,19 @@ function bindEvents() {
     tab.addEventListener("click", () => setActiveTab(tab.dataset.tab));
   });
 
-  document.querySelector('[data-action="cancel-stream"]').addEventListener("click", () => {
-    if (state.streamController) {
-      state.streamController.abort();
-    }
-  });
+  if (elements.streamCancel) {
+    elements.streamCancel.addEventListener("click", () => {
+      if (state.streamController) {
+        state.streamController.abort();
+      }
+    });
+  }
 
-  document.querySelector('[data-action="view-library"]').addEventListener("click", () => {
-    setActiveTab("library");
-  });
+  if (elements.streamLibrary) {
+    elements.streamLibrary.addEventListener("click", () => {
+      setActiveTab("library");
+    });
+  }
 
   document.querySelector('[data-action="logout"]').addEventListener("click", () => {
     clearAuth();

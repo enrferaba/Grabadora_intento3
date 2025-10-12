@@ -139,7 +139,7 @@ body {
 .hero {
   display: grid;
   gap: 2rem;
-  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.65fr) minmax(0, 0.85fr);
   margin-bottom: clamp(1.5rem, 4vw, 3rem);
 }
 
@@ -226,6 +226,8 @@ body {
   background-color: rgba(15, 23, 42, 0.7);
   background-image: radial-gradient(circle at top left, rgba(59, 130, 246, 0.4), rgba(14, 116, 144, 0.35));
   border: 1px solid rgba(148, 163, 184, 0.2);
+  max-width: 340px;
+  margin-left: auto;
 }
 
 .hero__visual-header {
@@ -497,6 +499,19 @@ select:focus {
   gap: 1rem;
 }
 
+.stream[data-state="streaming"] {
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  box-shadow: 0 12px 45px rgba(59, 130, 246, 0.18);
+}
+
+.stream[data-state="completed"] {
+  border: 1px solid rgba(34, 197, 94, 0.35);
+}
+
+.stream[data-state="error"] {
+  border: 1px solid rgba(248, 113, 113, 0.4);
+}
+
 .stream pre {
   height: 220px;
   overflow-y: auto;
@@ -505,6 +520,10 @@ select:focus {
   border-radius: 16px;
   border: 1px solid rgba(148, 163, 184, 0.15);
   white-space: pre-wrap;
+}
+
+.stream[data-state="idle"] pre {
+  color: rgba(148, 163, 184, 0.85);
 }
 
 .chip {

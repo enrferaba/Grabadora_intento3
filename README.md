@@ -7,6 +7,7 @@ Grabadora es una plataforma de transcripción en streaming pensada para uso real
 - **SPA lista para usuarios**: la carpeta `frontend/` incluye la SPA empaquetada en `dist/` (sin dependencias de Node) y el código fuente React/Vite (`src/`) por si quieres personalizarla. Transcribir, Grabar y Biblioteca funcionan con autenticación JWT, drag & drop, monitor de micro, SSE y exportaciones.
 - **Biblioteca con base de datos**: se introdujo el modelo `Transcript` y endpoints REST (`GET /transcripts`, `GET /transcripts/{id}`, `GET /transcripts/{id}/download`, `POST /transcripts/{id}/export`) para listar, buscar y descargar transcripciones finales.
 - **Streaming enriquecido**: los eventos `delta` del SSE son JSON con `{text, t0, t1}`; el evento `completed` añade duración, idioma y perfil de calidad. Las pruebas se actualizaron para validar el nuevo contrato.
+- **Cola en memoria integrada**: si Redis o RQ no están disponibles, la API activa automáticamente una cola en memoria que ejecuta los trabajos en segundo plano y mantiene los SSE funcionando para `python ejecutar.py` y entornos sin Docker.
 - **Worker con metadatos persistentes**: cada job registra progreso, perfil de calidad y segmentos en la base de datos, de modo que la Biblioteca pueda mostrar estado, duración y exportaciones aunque el worker se ejecute en otra máquina.
 - **Frontend servido desde FastAPI**: el build de Vite se expone desde `/` y se monta `/assets` como estático. Si no se ha compilado la SPA, FastAPI cae en la landing básica para debugging.
 
@@ -48,11 +49,11 @@ Consulta `app/config.py` y `.env.example` para la lista completa.
 3. Levanta toda la plataforma: `docker compose up --build`.
 4. Abre `http://localhost:8000/` para acceder a la SPA. La API, worker, Redis, PostgreSQL, MinIO, Prometheus y Grafana se montan automáticamente.
 
-> Si prefieres ejecutar sin Docker, instala dependencias con Poetry, levanta PostgreSQL/Redis/MinIO manualmente, ejecuta `alembic upgrade head`, genera el build de Vite y arranca `uvicorn app.main:app --reload`. El worker se lanza con `rq worker transcription --url $GRABADORA_REDIS_URL`.
+> Si prefieres ejecutar sin Docker, instala dependencias con Poetry y lanza `python ejecutar.py`. Ese script arranca `uvicorn app.main:app --reload` y, si no detecta Redis ni PostgreSQL, activa automáticamente una base SQLite (`grabadora.db`) y la cola en memoria. Para producción, levanta PostgreSQL/Redis/MinIO, ejecuta `alembic upgrade head`, recompila la SPA y arranca también el worker con `rq worker transcription --url $GRABADORA_REDIS_URL`.
 
 ## Cómo usar la interfaz web
 
-- **Transcribir**: arrastra un archivo o selecciona desde el explorador. Elige idioma, perfil de calidad (Rápido/Balanced/Preciso), activa diarización y observa los tokens en vivo. Guarda en biblioteca automáticamente.
+- **Transcribir**: arrastra un archivo o selecciónalo desde el explorador. Elige idioma, perfil de calidad (Rápido/Balanced/Preciso), activa diarización y observa los tokens en vivo. La tarjeta de "Transcripción en vivo" permanece visible con autoscroll, resaltando siempre los últimos deltas. Guarda en biblioteca automáticamente.
 - **Grabar**: usa el micro del navegador con visualizador de nivel y reconexión automática. Al detener la grabación se lanza la transcripción y se muestra el stream SSE.
 - **Biblioteca**: lista tus transcripciones con búsqueda en vivo, chips de estado, exportaciones a TXT/MD/SRT y acciones "Enviar a Notion/Trello". Cada tarjeta muestra título, etiquetas, calidad y estado.
 
@@ -132,3 +133,6 @@ Consulta `ejecutar.md` para una versión abreviada (un único comando) y sugeren
   SQLite (`grabadora.db`). Se crea en la raíz del proyecto y permite registrar
   usuarios y transcribir sin levantar Docker. Puedes personalizar la ruta con
   `GRABADORA_FALLBACK_SQLITE_URL` o borrar el fichero para reiniciar el estado.
+- **`RuntimeError: redis package is not installed`**: ya no deberías verlo; la
+  API usa la cola en memoria cuando faltan Redis/RQ. Si quieres forzar Redis,
+  instala las dependencias (`pip install redis rq`) o levanta el stack con Docker.

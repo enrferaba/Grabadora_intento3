@@ -39,3 +39,30 @@ def test_session_scope_falls_back_to_sqlite(monkeypatch, tmp_path):
     assert calls["primary"] >= 1
     assert calls["fallback"] >= 1
     assert fallback_db.exists()
+
+
+def test_session_scope_keeps_instances_attached(monkeypatch, tmp_path):
+    monkeypatch.setenv("GRABADORA_DATABASE_URL", f"sqlite:///{tmp_path/'attached.db'}")
+    app.config.get_settings.cache_clear()
+
+    import app.database as database
+    import models.user as models
+
+    importlib.reload(database)
+    importlib.reload(models)
+
+    with database.session_scope() as session:
+        models.Base.metadata.create_all(session.get_bind())
+
+    with database.session_scope() as session:
+        user = models.User(email="attached@example.com", hashed_password="hash")
+        profile = models.Profile(name="Default")
+        user.profiles.append(profile)
+        session.add(user)
+        session.flush()
+        created_id = user.id
+
+    assert user.id == created_id
+    assert user.profiles[0].name == "Default"
+
+    app.config.get_settings.cache_clear()

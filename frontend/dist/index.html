@@ -133,7 +133,7 @@
           </div>
         </section>
 
-        <section class="panel" id="panel-transcribe" hidden>
+        <section class="panel" id="panel-transcribe">
           <div class="panel__header">
             <h2>Sube un audio para transcribir</h2>
             <p>Arrastra un archivo o usa el botón. Seguiremos el progreso en vivo.</p>
@@ -171,15 +171,15 @@
             <button type="submit" class="btn btn--primary">Transcribir ahora</button>
             <p class="form-hint">Elige “Rápido” para ahorrar GPU si vas justo de minutos.</p>
           </form>
-          <div id="stream-output" class="card stream" hidden>
+          <div id="stream-output" class="card stream" data-state="idle">
             <header>
               <h3>Transcripción en vivo</h3>
               <span id="stream-status" class="chip">Esperando</span>
             </header>
-            <pre id="stream-text"></pre>
+            <pre id="stream-text">Tu transcripción aparecerá aquí en cuanto empiece el stream.</pre>
             <footer class="stream__footer">
-              <button class="btn" data-action="cancel-stream">Cancelar</button>
-              <button class="btn btn--primary" data-action="view-library">Ver en biblioteca</button>
+              <button class="btn" data-action="cancel-stream" disabled>Cancelar</button>
+              <button class="btn btn--primary" data-action="view-library" disabled>Ver en biblioteca</button>
             </footer>
           </div>
         </section>

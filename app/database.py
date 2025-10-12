@@ -31,7 +31,13 @@ else:
 
     def _bootstrap_factory(database_url: str) -> tuple[sessionmaker, Any]:
         engine = create_engine(database_url, pool_pre_ping=True, future=True)
-        factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+        factory = sessionmaker(
+            bind=engine,
+            autoflush=False,
+            autocommit=False,
+            expire_on_commit=False,
+            future=True,
+        )
         return factory, engine
 
     def _initialize_fallback(exc: Exception) -> None:

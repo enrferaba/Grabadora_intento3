@@ -110,29 +110,14 @@ except ImportError:  # pragma: no cover
             return self
 
 try:  # pragma: no cover - optional dependency
-    from redis import Redis
+    from redis import Redis as RedisClient
 except ImportError:  # pragma: no cover
-    class Redis:  # type: ignore
-        @staticmethod
-        def from_url(url: str):  # pragma: no cover
-            raise RuntimeError("redis package is not installed")
+    RedisClient = None
 
 try:  # pragma: no cover - optional dependency
-    from rq import Queue
+    from rq import Queue as RQQueue
 except ImportError:  # pragma: no cover
-    class Queue:  # type: ignore
-        def __init__(self, *args, **kwargs) -> None:
-            raise RuntimeError("rq package is not installed")
-
-        @property
-        def count(self) -> int:  # pragma: no cover
-            return 0
-
-        def fetch_job(self, job_id: str):  # pragma: no cover
-            return None
-
-        def enqueue(self, *args, **kwargs):  # pragma: no cover
-            raise RuntimeError("rq package is not installed")
+    RQQueue = None
 
 from app import auth
 from app.auth import get_current_user
@@ -180,9 +165,48 @@ except ImportError:  # pragma: no cover
             self.profiles: list = []
 
 from taskqueue import tasks
+from taskqueue.fallback import InMemoryQueue, InMemoryRedis
 from storage.s3 import S3StorageClient
 
 settings = get_settings()
+
+_fallback_queue: InMemoryQueue | None = None
+
+
+def _obtain_queue() -> tuple[object, bool]:
+    """Return a queue instance and whether it uses the in-memory fallback."""
+
+    global _fallback_queue
+    if RedisClient is None or RQQueue is None:  # dependencies missing entirely
+        if _fallback_queue is None:
+            _fallback_queue = InMemoryQueue(settings.rq_default_queue, connection=InMemoryRedis.from_url("memory://local"))
+        return _fallback_queue, True
+
+    try:
+        redis_conn = RedisClient.from_url(settings.redis_url)
+        if hasattr(redis_conn, "ping"):
+            redis_conn.ping()
+        return RQQueue(settings.rq_default_queue, connection=redis_conn), False
+    except Exception as exc:
+        logger.warning(
+            "Redis/RQ unavailable, enabling in-memory queue fallback", extra={"detail": str(exc)}
+        )
+        if _fallback_queue is None:
+            _fallback_queue = InMemoryQueue(settings.rq_default_queue, connection=InMemoryRedis.from_url("memory://local"))
+        return _fallback_queue, True
+
+
+def _queue_length(queue: object) -> int:
+    count_attr = getattr(queue, "count", 0)
+    try:
+        return int(count_attr()) if callable(count_attr) else int(count_attr)
+    except Exception:  # pragma: no cover - defensive
+        return 0
+
+
+# Backwards-compatible aliases for tests/monkeypatching ---------------------
+Queue = RQQueue if RQQueue is not None else InMemoryQueue  # type: ignore[assignment]
+Redis = RedisClient if RedisClient is not None else InMemoryRedis  # type: ignore[assignment]
 
 FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
 FRONTEND_SOURCE = Path(__file__).resolve().parent.parent / "frontend" / "index.html"
@@ -334,8 +358,11 @@ def _spa_index() -> HTMLResponse:
     return HTMLResponse("<h1>Grabadora</h1><p>Frontend assets missing.</p>")
 
 
-async def _stream_job(job_id: str, redis: Redis) -> AsyncGenerator[Dict[str, str], None]:
-    queue = Queue(name=settings.rq_default_queue, connection=redis)
+async def _stream_job(job_id: str, redis: object | None = None) -> AsyncGenerator[Dict[str, str], None]:
+    if redis is not None:
+        queue = Queue(name=settings.rq_default_queue, connection=redis)  # type: ignore[call-arg]
+    else:
+        queue, _ = _obtain_queue()
     job = queue.fetch_job(job_id)
     if job is None:
         yield {"event": "error", "data": "job-not-found"}
@@ -346,8 +373,7 @@ async def _stream_job(job_id: str, redis: Redis) -> AsyncGenerator[Dict[str, str
         job.refresh()
         status = job.get_status(refresh=False)
         meta: Dict = job.meta or {}
-        queue_count_attr = getattr(queue, "count", 0)
-        queue_size = queue_count_attr() if callable(queue_count_attr) else queue_count_attr
+        queue_size = _queue_length(queue)
         try:
             QUEUE_LENGTH.set(float(queue_size or 0))
         except Exception:  # pragma: no cover - defensive
@@ -426,8 +452,7 @@ if app is not None:
     ) -> TranscriptResponse:
         if profile not in QUALITY_PROFILES:
             raise HTTPException(status_code=400, detail="Invalid quality profile")
-        redis = Redis.from_url(settings.redis_url)
-        queue = Queue(settings.rq_default_queue, connection=redis)
+        queue, used_fallback = _obtain_queue()
 
         storage = S3StorageClient()
         storage.ensure_buckets()
@@ -436,7 +461,7 @@ if app is not None:
         storage.upload_audio(file.file, audio_key)
 
         primary_profile_id = user.profiles[0].id if getattr(user, "profiles", []) else None
-        job = queue.enqueue(
+        job = queue.enqueue(  # type: ignore[call-arg]
             tasks.transcribe_job,
             audio_key,
             language=language,
@@ -445,7 +470,7 @@ if app is not None:
             quality_profile=profile,
         )
         try:
-            QUEUE_LENGTH.set(float(queue.count))
+            QUEUE_LENGTH.set(float(_queue_length(queue)))
         except Exception:  # pragma: no cover - defensive
             QUEUE_LENGTH.set(0)
 
@@ -471,25 +496,24 @@ if app is not None:
             transcript.segments = json.dumps([])
             session.add(transcript)
             session.flush()
-            logger.info(
-                "Queued transcription job",
-                extra={
-                    "job_id": job.id,
-                    "audio_key": audio_key,
-                    "user_id": user.id,
-                    "quality_profile": profile,
-                    "meta": meta_notes,
-                },
-            )
+            log_payload = {
+                "job_id": job.id,
+                "audio_key": audio_key,
+                "user_id": user.id,
+                "quality_profile": profile,
+                "meta": meta_notes,
+            }
+            if used_fallback:
+                log_payload["queue_backend"] = "memory"
+            logger.info("Queued transcription job", extra=log_payload)
 
         return TranscriptResponse(job_id=job.id, status="queued", quality_profile=profile)
 
     @app.get("/transcribe/{job_id}")
     async def stream_transcription(job_id: str, user: User = Depends(get_current_user)) -> EventSourceResponse:
-        redis = Redis.from_url(settings.redis_url)
 
         async def event_generator() -> AsyncGenerator[Dict[str, str], None]:
-            async for event in _stream_job(job_id, redis):
+            async for event in _stream_job(job_id):
                 yield event
 
         return EventSourceResponse(event_generator())
