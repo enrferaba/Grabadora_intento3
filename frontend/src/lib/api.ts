@@ -58,6 +58,7 @@ export interface TranscriptDetail extends TranscriptSummary {
 
 export interface StreamHandlers {
   onDelta?: (delta: { text: string; t0: number; t1: number }) => void;
+  onSnapshot?: (payload: { text: string; progress: number; segments?: Array<{ start: number; end: number; text: string }> }) => void;
   onCompleted?: (payload: Record<string, unknown>) => void;
   onError?: (error: Error) => void;
   onHeartbeat?: (payload: { status?: string; progress?: number; segment?: number }) => void;
@@ -197,6 +198,8 @@ function parseEventStream(chunk: string, handlers: StreamHandlers, state: Stream
       } else if (eventType === "error") {
         state.failed = true;
         handlers.onError?.(new Error(payload.detail ?? payloadText));
+      } else if (eventType === "snapshot") {
+        handlers.onSnapshot?.(payload);
       } else if (eventType === "heartbeat") {
         handlers.onHeartbeat?.(payload);
       }
@@ -206,6 +209,8 @@ function parseEventStream(chunk: string, handlers: StreamHandlers, state: Stream
       } else if (eventType === "error") {
         state.failed = true;
         handlers.onError?.(error as Error);
+      } else if (eventType === "snapshot") {
+        handlers.onSnapshot?.({ text: payloadText, progress: 0, segments: [] });
       }
     }
   }

@@ -104,15 +104,44 @@ def transcribe_job(
         storage_client.download_audio(audio_key, audio_path)
 
         transcript_parts: list[str] = []
+        partial_segments: dict[int, dict[str, Any]] = {}
 
         def on_token(token: dict) -> None:
-            transcript_parts.append(token["text"])
+            text = token.get("text", "")
+            if not text:
+                return
+            transcript_parts.append(text)
             segment_index = int(token.get("segment", len(transcript_parts)))
+            start_time = float(token.get("t0", 0.0) or 0.0)
+            end_time = float(token.get("t1", start_time) or start_time)
+            segment_info = partial_segments.setdefault(
+                segment_index,
+                {
+                    "start": start_time,
+                    "end": end_time,
+                    "text": "",
+                },
+            )
+            segment_info["start"] = min(segment_info["start"], start_time)
+            segment_info["end"] = max(segment_info["end"], end_time)
+            segment_info["text"] = f"{segment_info['text']}{text}"
+
+            snapshot = "".join(transcript_parts).strip()
+            segments_payload = [
+                {
+                    "start": value["start"],
+                    "end": value["end"],
+                    "text": value["text"].strip(),
+                }
+                for _, value in sorted(partial_segments.items())
+            ]
             _update_job_meta(
                 {
                     "last_token": json.dumps(token),
                     "progress": len(transcript_parts),
                     "segment": segment_index,
+                    "transcript_so_far": snapshot,
+                    "segments_partial": json.dumps(segments_payload),
                 }
             )
 
@@ -129,6 +158,8 @@ def transcribe_job(
             "language": result["language"],
             "duration": result.get("duration"),
             "segment": len(result.get("segments", [])),
+            "transcript_so_far": result.get("text", ""),
+            "segments_partial": json.dumps(result.get("segments", [])),
         }
     )
 
