@@ -9,8 +9,6 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
-import argparse
-import importlib.util
 import shutil
 import subprocess
 import sys
@@ -61,6 +59,8 @@ CLI_REQUIREMENTS = {
     "npm": "Instala Node.js LTS desde https://nodejs.org/.",
 }
 
+FFMPEG_REMEDY = "Instala FFmpeg y asegúrate de que 'ffmpeg' esté en el PATH."
+
 
 def check_python_packages() -> List[CheckResult]:
     results: List[CheckResult] = []
@@ -99,6 +99,28 @@ def check_frontend_ready() -> CheckResult:
     )
 
 
+def check_ffmpeg_available() -> CheckResult:
+    ok = shutil.which("ffmpeg") is not None
+    return CheckResult(
+        name="FFmpeg disponible",
+        ok=ok,
+        remedy=FFMPEG_REMEDY,
+        details=None if ok else "Añade el ejecutable 'ffmpeg' al PATH del sistema.",
+    )
+
+
+def check_frontend_build() -> CheckResult:
+    dist_dir = Path("frontend/dist")
+    index_file = dist_dir / "index.html"
+    ok = dist_dir.exists() and index_file.exists()
+    return CheckResult(
+        name="Build de frontend generado",
+        ok=ok,
+        remedy="Ejecuta 'npm run build' dentro de frontend/ para crear la carpeta dist/.",
+        details=None if ok else "No se encontró 'frontend/dist/index.html'.",
+    )
+
+
 def _has_docker_compose() -> bool:
     try:
         result = subprocess.run(
@@ -125,8 +147,14 @@ def install_missing_python(packages: Iterable[str]) -> None:
 
 
 def ensure_frontend_dependencies() -> None:
+    npm_path = shutil.which("npm")
+    if npm_path is None:
+        print("No se pudo ejecutar 'npm install' porque 'npm' no está disponible en PATH.")
+        print("Instala Node.js o añade 'npm' al PATH y vuelve a intentarlo.")
+        return
+
     print("Instalando dependencias de frontend (npm install)...")
-    subprocess.run(["npm", "install"], cwd=Path("frontend"), check=False)
+    subprocess.run([npm_path, "install"], cwd=Path("frontend"), check=False)
 
 
 def run_checks(install_missing: bool = False, fix_frontend: bool = False) -> int:
@@ -137,6 +165,8 @@ def run_checks(install_missing: bool = False, fix_frontend: bool = False) -> int
     results.extend(check_cli_tools())
     frontend_result = check_frontend_ready()
     results.append(frontend_result)
+    results.append(check_ffmpeg_available())
+    results.append(check_frontend_build())
 
     for item in results:
         print(item.render())
