@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Grabadora Inteligente</title>
+    <link rel="stylesheet" href="/assets/app.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="topbar">
+        <a href="#" class="topbar__brand" data-action="open-transcribe">
+          <span class="topbar__logo">Grabadora inteligente</span>
+          <span class="topbar__tagline">Transcribe y graba en segundos</span>
+        </a>
+        <nav class="tabs topbar__tabs">
+          <button class="tabs__item" data-tab="transcribe">Transcribir</button>
+          <button class="tabs__item" data-tab="record">Grabar</button>
+          <button class="tabs__item" data-tab="library">Biblioteca</button>
+          <button class="tabs__item" data-tab="account">Cuenta</button>
+        </nav>
+        <div class="topbar__account">
+          <button
+            class="account-button"
+            data-action="toggle-account-menu"
+            aria-haspopup="true"
+            aria-expanded="false"
+            title="Opciones de cuenta"
+          >
+            <span id="account-initial">👤</span>
+          </button>
+          <div class="account-menu" id="account-menu" hidden>
+            <div class="account-menu__header">
+              <span class="account-menu__title">Tu cuenta</span>
+              <span class="account-menu__subtitle">Elige cómo continuar</span>
+            </div>
+            <button class="account-menu__item" data-menu-action="signup">Crear cuenta</button>
+            <button class="account-menu__item" data-menu-action="login">Iniciar sesión</button>
+            <button class="account-menu__item" data-menu-action="guest">Entrar sin cuenta</button>
+          </div>
+        </div>
+      </header>
+      <header class="hero">
+        <div class="hero__primary card">
+          <div class="hero__headline">
+            <h1>Grabadora Inteligente</h1>
+            <p>Transcribe, graba y organiza tus conversaciones con ayuda de IA.</p>
+            <div class="hero__actions">
+              <button class="btn btn--primary" data-action="open-auth">Iniciar sesión</button>
+              <button class="btn" data-action="open-transcribe">Probar sin cuenta</button>
+            </div>
+          </div>
+          <div class="hero__metrics">
+            <div class="metric">
+              <span class="metric__value" id="metric-minutes">0 min</span>
+              <span class="metric__label">Minutos restantes</span>
+            </div>
+            <div class="metric">
+              <span class="metric__value" id="metric-queue">0</span>
+              <span class="metric__label">En cola</span>
+            </div>
+            <div class="metric">
+              <span class="metric__value" id="metric-speed">–</span>
+              <span class="metric__label">Perfil activo</span>
+            </div>
+          </div>
+          <div class="hero__profiles">
+            <div class="hero__profile">
+              <h4>Rápido (int8)</h4>
+              <p>Ideal para notas rápidas y modo demo.</p>
+            </div>
+            <div class="hero__profile">
+              <h4>Equilibrado (float16)</h4>
+              <p>Balance perfecto entre coste y precisión.</p>
+            </div>
+            <div class="hero__profile">
+              <h4>Preciso (float32)</h4>
+              <p>Para entrevistas y masterclass sin pérdidas.</p>
+            </div>
+          </div>
+        </div>
+        <div class="hero__side">
+          <div class="card hero__features">
+            <h3>Así funciona</h3>
+            <ul class="hero__features-list">
+              <li>Sube audio y recibe subtítulos token a token vía SSE.</li>
+              <li>Graba desde el navegador con reconexión automática.</li>
+              <li>Organiza tu biblioteca con etiquetas, estados y exportaciones.</li>
+              <li>Comparte en Notion, Trello o por webhooks en un clic.</li>
+            </ul>
+          </div>
+          <div class="card hero__visual">
+            <div class="hero__visual-header">
+              <span class="hero__visual-dot hero__visual-dot--red"></span>
+              <span class="hero__visual-dot hero__visual-dot--yellow"></span>
+              <span class="hero__visual-dot hero__visual-dot--green"></span>
+              <span class="hero__visual-title">Sesión en vivo</span>
+            </div>
+            <div class="hero__visual-body">
+              <div class="hero__visual-wave">
+                <span></span><span></span><span></span><span></span><span></span><span></span>
+                <span></span><span></span><span></span><span></span><span></span><span></span>
+              </div>
+              <div class="hero__visual-caption">
+                <span class="hero__visual-chip">“Estoy llegando en 5 minutos”</span>
+                <span class="hero__visual-note">Deltas en vivo guardados en tu biblioteca</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
+      <main>
+        <section class="panel" id="panel-auth" hidden>
+          <div class="panel__header">
+            <h2>Accede a tu cuenta</h2>
+            <p>Regístrate o inicia sesión para sincronizar tus transcripciones.</p>
+          </div>
+          <div class="auth">
+            <form id="signup-form" class="card">
+              <h3>Crear cuenta</h3>
+              <label>Correo electrónico<input type="email" name="email" required /></label>
+              <label>Contraseña<input type="password" name="password" minlength="8" required /></label>
+              <button type="submit" class="btn btn--primary">Registrarme</button>
+              <p class="form-hint">Recibirás un token inmediato, sin correos.</p>
+            </form>
+            <form id="login-form" class="card">
+              <h3>Iniciar sesión</h3>
+              <label>Correo electrónico<input type="email" name="email" required /></label>
+              <label>Contraseña<input type="password" name="password" minlength="8" required /></label>
+              <button type="submit" class="btn btn--primary">Entrar</button>
+              <p class="form-hint">Guardamos tu token en este navegador.</p>
+            </form>
+          </div>
+        </section>
+
+        <section class="panel" id="panel-transcribe">
+          <div class="panel__header">
+            <h2>Sube un audio para transcribir</h2>
+            <p>Arrastra un archivo o usa el botón. Seguiremos el progreso en vivo.</p>
+          </div>
+          <form id="transcribe-form" class="card dropzone">
+            <div class="dropzone__input">
+              <input type="file" name="file" accept="audio/*" required />
+              <p>Suelta tu archivo aquí o haz clic para elegirlo.</p>
+            </div>
+            <div class="grid">
+              <label>Idioma
+                <input type="text" name="language" placeholder="auto" />
+              </label>
+              <label>Perfil de calidad
+                <select name="profile">
+                  <option value="fast">Rápido (int8)</option>
+                  <option value="balanced" selected>Equilibrado (float16)</option>
+                  <option value="precise">Preciso (float32)</option>
+                </select>
+              </label>
+              <label>Título
+                <input type="text" name="title" placeholder="Reunión con..." />
+              </label>
+              <label>Etiquetas
+                <input type="text" name="tags" placeholder="marketing, sprint" />
+              </label>
+            </div>
+            <div class="toggles">
+              <label><input type="checkbox" name="diarization" /> Diarización</label>
+              <label><input type="checkbox" name="word_timestamps" checked /> Timestamps palabra</label>
+            </div>
+            <div class="progress" aria-live="polite">
+              <div class="progress__bar" id="upload-progress"></div>
+            </div>
+            <button type="submit" class="btn btn--primary">Transcribir ahora</button>
+            <p class="form-hint">Elige “Rápido” para ahorrar GPU si vas justo de minutos.</p>
+          </form>
+          <div id="stream-output" class="card stream" data-state="idle">
+            <header>
+              <h3>Transcripción en vivo</h3>
+              <span id="stream-status" class="chip">Esperando</span>
+            </header>
+            <pre id="stream-text">Tu transcripción aparecerá aquí en cuanto empiece el stream.</pre>
+            <footer class="stream__footer">
+              <button class="btn" data-action="cancel-stream" disabled>Cancelar</button>
+              <button class="btn btn--primary" data-action="view-library" disabled>Ver en biblioteca</button>
+            </footer>
+          </div>
+        </section>
+
+        <section class="panel" id="panel-record" hidden>
+          <div class="panel__header">
+            <h2>Graba desde tu navegador</h2>
+            <p>Captura audio con medidor de nivel y súbelo con un clic.</p>
+          </div>
+          <div class="card recorder">
+            <div class="recorder__meter" aria-live="polite">
+              <div class="recorder__meter-bar" id="meter-bar"></div>
+            </div>
+            <canvas id="waveform" width="600" height="120"></canvas>
+            <div class="recorder__actions">
+              <button class="btn btn--primary" data-action="start-recording">Grabar</button>
+              <button class="btn" data-action="stop-recording" disabled>Detener</button>
+              <button class="btn" data-action="upload-recording" disabled>Subir a transcripción</button>
+            </div>
+            <audio id="recording-preview" controls hidden></audio>
+            <p class="form-hint">Si el stream se corta, reconectamos automáticamente.</p>
+          </div>
+        </section>
+
+        <section class="panel" id="panel-library" hidden>
+          <div class="panel__header">
+            <h2>Tu biblioteca</h2>
+            <p>Busca, etiqueta y exporta tus transcripciones en segundos.</p>
+          </div>
+          <div class="card">
+            <form id="library-filters" class="filters">
+              <input type="search" name="search" placeholder="Buscar por título o etiqueta" />
+              <select name="status">
+                <option value="">Todos</option>
+                <option value="queued">En cola</option>
+                <option value="started">Procesando</option>
+                <option value="completed">Completado</option>
+                <option value="failed">Error</option>
+              </select>
+              <button type="submit" class="btn">Actualizar</button>
+            </form>
+            <div id="library-list" class="library"></div>
+          </div>
+        </section>
+
+        <section class="panel" id="panel-account" hidden>
+          <div class="panel__header">
+            <h2>Cuenta y organización</h2>
+            <p>Gestiona perfiles, cuotas y conecta tus herramientas.</p>
+          </div>
+          <div class="card account">
+            <dl>
+              <div>
+                <dt>Sesión</dt>
+                <dd id="account-email">Visitante</dd>
+              </div>
+              <div>
+                <dt>Perfiles de calidad</dt>
+                <dd>
+                  <ul>
+                    <li><strong>Rápido (int8)</strong>: mínimo coste, ideal para notas rápidas.</li>
+                    <li><strong>Equilibrado (float16)</strong>: recomendado para reuniones y clases.</li>
+                    <li><strong>Preciso (float32)</strong>: máxima fidelidad para entrevistas críticas.</li>
+                  </ul>
+                </dd>
+              </div>
+              <div>
+                <dt>Integraciones</dt>
+                <dd>
+                  <p>Exporta a Notion, Trello o via webhook desde cada tarjeta en la biblioteca.</p>
+                </dd>
+              </div>
+            </dl>
+            <button class="btn" data-action="logout">Cerrar sesión</button>
+          </div>
+        </section>
+      </main>
+      <div id="toast" role="alert" aria-live="polite"></div>
+    </div>
+    <script type="module" src="/assets/app.js"></script>
+  </body>
+</html>
