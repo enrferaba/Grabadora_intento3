@@ -7,7 +7,7 @@ import logging
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import AsyncGenerator, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, AsyncGenerator, Dict, List, Optional
 
 try:  # pragma: no cover - optional dependency
     from fastapi import Body, Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
@@ -70,6 +70,17 @@ except ImportError:  # pragma: no cover
 
     class ClientDisconnect(Exception):  # type: ignore
         pass
+
+if TYPE_CHECKING:  # pragma: no cover - typing helpers for optional FastAPI dependency
+    from fastapi import FastAPI as FastAPIApp
+    from fastapi.responses import HTMLResponse as HTMLResponseType
+    from fastapi.responses import JSONResponse as JSONResponseType
+    from fastapi.responses import Response as ResponseType
+else:  # graceful fallbacks for static analysis when FastAPI is unavailable at runtime
+    FastAPIApp = Any
+    HTMLResponseType = Any
+    JSONResponseType = Any
+    ResponseType = Any
 
 try:  # pragma: no cover - optional dependency
     from sse_starlette.sse import EventSourceResponse
@@ -268,7 +279,7 @@ if hasattr(structlog, "processors"):
 structlog.configure(processors=processors)
 logger = structlog.get_logger(__name__)
 
-app: FastAPI | None = None  # type: ignore[misc]
+app: FastAPIApp | None = None  # type: ignore[misc]
 if FastAPI is not None:
     app = FastAPI(title=settings.api_title, version=settings.api_version, description=settings.api_description)
     app.add_middleware(
@@ -359,7 +370,7 @@ def _transcript_to_detail(transcript: Transcript, *, include_url: bool = True) -
     )
 
 
-def _spa_index() -> HTMLResponse:
+def _spa_index() -> HTMLResponseType:
     if FRONTEND_DIST.exists():
         return HTMLResponse((FRONTEND_DIST / "index.html").read_text(encoding="utf-8"))
     if FRONTEND_SOURCE.exists():
@@ -473,7 +484,7 @@ if app is not None:
         SPA_MOUNTED = True
 
     @app.exception_handler(Exception)
-    async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponseType:
         API_ERRORS.inc()
         logger.exception("Unhandled exception", exc_info=exc)
         return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
@@ -715,7 +726,7 @@ if app is not None:
         transcript_id: int,
         format: str = Query("txt", enum=["txt", "md", "srt"]),
         user: AuthenticatedUser = Depends(get_current_user),
-    ) -> Response:
+    ) -> ResponseType:
         with session_scope() as session:
             transcript = session.query(Transcript).filter(Transcript.id == transcript_id, Transcript.user_id == user.id).one_or_none()
             if transcript is None or not transcript.transcript_key:
@@ -743,7 +754,7 @@ if app is not None:
         transcript_id: int,
         payload: TranscriptExportRequest = Body(...),
         user: AuthenticatedUser = Depends(get_current_user),
-    ) -> JSONResponse:
+    ) -> JSONResponseType:
         allowed_destinations = {"notion", "trello", "webhook"}
         if payload.destination not in allowed_destinations:
             raise HTTPException(status_code=400, detail="Unsupported destination")
@@ -768,17 +779,17 @@ if app is not None:
         )
 
     @app.get("/healthz")
-    async def healthcheck() -> JSONResponse:
+    async def healthcheck() -> JSONResponseType:
         _sample_gpu_usage()
         return JSONResponse({"status": "ok", "time": datetime.utcnow().isoformat()})
 
     if not SPA_MOUNTED:
         @app.get("/", response_class=HTMLResponse)
-        async def root() -> HTMLResponse:
+        async def root() -> HTMLResponseType:
             return _spa_index()
 
         @app.get("/{full_path:path}", response_class=HTMLResponse)
-        async def spa_router(full_path: str) -> HTMLResponse:
+        async def spa_router(full_path: str) -> HTMLResponseType:
             reserved_prefixes = (
                 "docs",
                 "redoc",
@@ -796,7 +807,7 @@ if app is not None:
             return _spa_index()
 
 
-def create_app() -> FastAPI:
+def create_app() -> FastAPIApp:
     if app is None:
         raise RuntimeError("FastAPI is not available")
     return app
