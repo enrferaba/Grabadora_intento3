@@ -61,6 +61,7 @@ def _patch_forward_ref_recursive_guard() -> None:
         return
 
     original = ForwardRef._evaluate
+    recursive_param = parameters["recursive_guard"]
 
     def _evaluate(
         self,  # type: ignore[override]
@@ -72,7 +73,23 @@ def _patch_forward_ref_recursive_guard() -> None:
     ):
         if recursive_guard is None:
             recursive_guard = set()
-        return original(self, globalns, localns, type_params, recursive_guard=recursive_guard)
+
+        if recursive_param.kind is inspect.Parameter.KEYWORD_ONLY:
+            return original(
+                self,
+                globalns,
+                localns,
+                type_params,
+                recursive_guard=recursive_guard,
+            )
+
+        return original(
+            self,
+            globalns,
+            localns,
+            type_params,
+            recursive_guard,
+        )
 
     ForwardRef._evaluate = _evaluate  # type: ignore[assignment]
 
