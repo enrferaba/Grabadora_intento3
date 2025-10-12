@@ -31,10 +31,22 @@ export function SseViewer({ tokens, status, error, onRetry }: SseViewerProps) {
   };
 
   return (
-    <div className="card" style={{ width: "100%", minHeight: "280px", display: "flex", flexDirection: "column", gap: "1rem" }}>
+    <div
+      className="card"
+      style={{
+        width: "100%",
+        minHeight: "360px",
+        display: "flex",
+        flexDirection: "column",
+        gap: "1rem",
+        background: "linear-gradient(180deg, rgba(15,23,42,0.9), rgba(8,47,73,0.9))",
+        border: "1px solid rgba(56,189,248,0.15)",
+        boxShadow: "0 30px 80px -50px rgba(8,47,73,0.9)",
+      }}
+    >
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
-          <h3 style={{ margin: 0 }}>Deltas en vivo</h3>
+          <h3 style={{ margin: 0, fontSize: "1.4rem" }}>Transcripción en vivo</h3>
           <p style={{ margin: 0, color: "#94a3b8" }}>{statusCopy[status]}</p>
         </div>
         {status === "error" && onRetry && (
@@ -47,13 +59,15 @@ export function SseViewer({ tokens, status, error, onRetry }: SseViewerProps) {
         ref={containerRef}
         style={{
           flex: 1,
-          background: "rgba(2, 6, 23, 0.45)",
-          borderRadius: "16px",
+          background: "rgba(2, 6, 23, 0.55)",
+          borderRadius: "18px",
           padding: "1rem",
           overflowY: "auto",
+          maxHeight: "440px",
           lineHeight: 1.6,
           fontSize: "1rem",
           color: "#f8fafc",
+          boxShadow: "inset 0 0 0 1px rgba(148,163,184,0.1)",
         }}
       >
         {tokens.length === 0 && status === "idle" && (

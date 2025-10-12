@@ -6,8 +6,9 @@ import hashlib
 import hmac
 import json
 import secrets
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Any, Optional
+from typing import Any, List, Optional
 
 try:  # pragma: no cover - optional dependency
     from fastapi import Depends, HTTPException, status
@@ -49,8 +50,13 @@ from app.database import session_scope
 from app.utils.jwt import decode_jwt, encode_jwt
 
 try:  # pragma: no cover - optional dependency
-    from models.user import User
+    from models.user import Profile, User
 except ImportError:  # pragma: no cover
+    class Profile:  # type: ignore
+        id: int
+        name: str
+        description: Optional[str]
+
     class User:  # type: ignore
         id: int
         email: str
@@ -67,6 +73,20 @@ except RuntimeError:  # pragma: no cover - FastAPI not available
 class TokenData:
     def __init__(self, user_id: int):
         self.user_id = user_id
+
+
+@dataclass
+class AuthenticatedProfile:
+    id: int
+    name: str
+    description: Optional[str] = None
+
+
+@dataclass
+class AuthenticatedUser:
+    id: int
+    email: str
+    profiles: List[AuthenticatedProfile] = field(default_factory=list)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -101,7 +121,7 @@ def authenticate_user(session: Session, email: str, password: str) -> Optional[U
     return None
 
 
-def get_current_user(token: str = Depends(oauth2_scheme)) -> User:  # type: ignore[call-arg]
+def get_current_user(token: str = Depends(oauth2_scheme)) -> AuthenticatedUser:  # type: ignore[call-arg]
     if oauth2_scheme is None:  # pragma: no cover - FastAPI not available
         raise RuntimeError("FastAPI must be installed to use get_current_user")
 
@@ -126,7 +146,18 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> User:  # type: igno
         user = session.query(User).filter(User.id == user_id).one_or_none()
         if user is None:
             raise credentials_exception
-        return user
+
+        profiles: List[AuthenticatedProfile] = []
+        for profile in list(getattr(user, "profiles", []) or []):
+            profiles.append(
+                AuthenticatedProfile(
+                    id=getattr(profile, "id", 0),
+                    name=getattr(profile, "name", ""),
+                    description=getattr(profile, "description", None),
+                )
+            )
+
+        return AuthenticatedUser(id=user.id, email=user.email, profiles=profiles)
 
 
 def login(form_data: OAuth2PasswordRequestForm = Depends()) -> dict:  # type: ignore[call-arg]

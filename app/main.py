@@ -120,7 +120,7 @@ except ImportError:  # pragma: no cover
     RQQueue = None
 
 from app import auth
-from app.auth import get_current_user
+from app.auth import AuthenticatedUser, get_current_user
 from app.config import get_settings
 from app.database import session_scope
 from app.schemas import (
@@ -448,7 +448,7 @@ if app is not None:
         tags: Optional[str] = Form(None),
         diarization: bool = Form(False),
         word_timestamps: bool = Form(True),
-        user: User = Depends(get_current_user),
+        user: AuthenticatedUser = Depends(get_current_user),
     ) -> TranscriptResponse:
         if profile not in QUALITY_PROFILES:
             raise HTTPException(status_code=400, detail="Invalid quality profile")
@@ -510,7 +510,9 @@ if app is not None:
         return TranscriptResponse(job_id=job.id, status="queued", quality_profile=profile)
 
     @app.get("/transcribe/{job_id}")
-    async def stream_transcription(job_id: str, user: User = Depends(get_current_user)) -> EventSourceResponse:
+    async def stream_transcription(
+        job_id: str, user: AuthenticatedUser = Depends(get_current_user)
+    ) -> EventSourceResponse:
 
         async def event_generator() -> AsyncGenerator[Dict[str, str], None]:
             async for event in _stream_job(job_id):
@@ -522,7 +524,7 @@ if app is not None:
     async def list_transcripts(
         search: Optional[str] = Query(None, description="Texto libre para filtrar títulos o etiquetas"),
         status: Optional[str] = Query(None, description="Filtra por estado"),
-        user: User = Depends(get_current_user),
+        user: AuthenticatedUser = Depends(get_current_user),
     ) -> List[TranscriptSummary]:
         with session_scope() as session:
             items = (
@@ -544,7 +546,9 @@ if app is not None:
         return results
 
     @app.get("/transcripts/{transcript_id}", response_model=TranscriptDetail)
-    async def get_transcript(transcript_id: int, user: User = Depends(get_current_user)) -> TranscriptDetail:
+    async def get_transcript(
+        transcript_id: int, user: AuthenticatedUser = Depends(get_current_user)
+    ) -> TranscriptDetail:
         with session_scope() as session:
             transcript = session.query(Transcript).filter(Transcript.id == transcript_id, Transcript.user_id == user.id).one_or_none()
             if transcript is None:
@@ -566,7 +570,7 @@ if app is not None:
     async def download_transcript(
         transcript_id: int,
         format: str = Query("txt", enum=["txt", "md", "srt"]),
-        user: User = Depends(get_current_user),
+        user: AuthenticatedUser = Depends(get_current_user),
     ) -> Response:
         with session_scope() as session:
             transcript = session.query(Transcript).filter(Transcript.id == transcript_id, Transcript.user_id == user.id).one_or_none()
@@ -594,7 +598,7 @@ if app is not None:
     async def export_transcript(
         transcript_id: int,
         payload: TranscriptExportRequest = Body(...),
-        user: User = Depends(get_current_user),
+        user: AuthenticatedUser = Depends(get_current_user),
     ) -> JSONResponse:
         allowed_destinations = {"notion", "trello", "webhook"}
         if payload.destination not in allowed_destinations:

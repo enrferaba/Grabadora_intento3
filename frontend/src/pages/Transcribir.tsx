@@ -9,13 +9,15 @@ interface Props {
   requireAuth?: boolean;
 }
 
+type FlowStatus = "idle" | "uploading" | "streaming" | "completed" | "error" | "recording";
+
 export function TranscribirPage({ onLibraryRefresh, requireAuth = true }: Props) {
   const [language, setLanguage] = useState("auto");
   const [profile, setProfile] = useState("balanced");
   const [tags, setTags] = useState("reunión, minutos");
   const [title, setTitle] = useState("");
   const [tokens, setTokens] = useState<Array<{ text: string; t0: number; t1: number }>>([]);
-  const [status, setStatus] = useState<"idle" | "uploading" | "streaming" | "completed" | "error">("idle");
+  const [status, setStatus] = useState<FlowStatus>("idle");
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
@@ -82,18 +84,119 @@ export function TranscribirPage({ onLibraryRefresh, requireAuth = true }: Props)
       setCompletedPayload(null);
     }
 
+  const statusPalette: Record<FlowStatus, string> = {
+    idle: "rgba(148, 163, 184, 0.45)",
+    uploading: "rgba(59, 130, 246, 0.65)",
+    streaming: "rgba(56, 189, 248, 0.85)",
+    completed: "rgba(34, 197, 94, 0.85)",
+    error: "rgba(239, 68, 68, 0.85)",
+    recording: "rgba(244, 114, 182, 0.85)",
+  };
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "2rem", width: "100%" }}>
-      <section style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: "2rem", alignItems: "start" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "2.5rem", width: "100%" }}>
+      <section
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(320px, 1fr) minmax(420px, 1.15fr)",
+          gap: "2rem",
+          alignItems: "stretch",
+          width: "100%",
+        }}
+      >
         <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-          <div className="card" style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-            <header>
-              <h2 style={{ margin: 0 }}>Transcribir</h2>
-              <p style={{ margin: 0, color: "#94a3b8" }}>
-                Sube un archivo o grábalo en la pestaña "Grabar". Seguimos cada token en vivo por SSE.
-              </p>
+          <div
+            className="card"
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "1.25rem",
+              background: "linear-gradient(135deg, rgba(15,23,42,0.95), rgba(2,6,23,0.85))",
+              border: "1px solid rgba(148,163,184,0.2)",
+              boxShadow: "0 25px 60px -35px rgba(15,23,42,0.8)",
+            }}
+          >
+            <header style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem" }}>
+                <div>
+                  <h2 style={{ margin: 0, fontSize: "1.65rem" }}>Sube tu audio</h2>
+                  <p style={{ margin: 0, color: "#94a3b8", lineHeight: 1.6 }}>
+                    Arrastra y suelta o selecciona un archivo. Comenzamos a transcribir en cuanto lo recibimos.
+                  </p>
+                </div>
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.4rem",
+                    padding: "0.35rem 0.85rem",
+                    borderRadius: "999px",
+                    background: statusPalette[status],
+                    color: "#0f172a",
+                    fontSize: "0.8rem",
+                    fontWeight: 600,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {status === "idle" && "Listo"}
+                  {status === "uploading" && `Subiendo ${uploadProgress}%`}
+                  {status === "streaming" && "Transcribiendo"}
+                  {status === "completed" && "Completado"}
+                  {status === "error" && "Error"}
+                  {status === "recording" && "Grabando"}
+                </span>
+              </div>
+              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                {qualityProfiles().map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setProfile(item.id)}
+                    style={{
+                      borderRadius: "999px",
+                      padding: "0.35rem 0.95rem",
+                      border: profile === item.id ? "1px solid #38bdf8" : "1px solid rgba(148,163,184,0.35)",
+                      background: profile === item.id ? "rgba(56,189,248,0.15)" : "rgba(15,23,42,0.4)",
+                      color: "#e2e8f0",
+                      cursor: "pointer",
+                      transition: "all 0.2s ease",
+                    }}
+                  >
+                    <strong style={{ display: "block", fontSize: "0.85rem" }}>{item.title}</strong>
+                    <span style={{ fontSize: "0.7rem", color: "#94a3b8" }}>{item.description}</span>
+                  </button>
+                ))}
+              </div>
             </header>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "1rem" }}>
+            <Uploader onSelect={handleSubmit} busy={status === "uploading" || status === "streaming"} />
+            {(status === "completed" || status === "error") && (
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem" }}>
+                <div style={{ color: status === "completed" ? "#22c55e" : "#fca5a5" }}>
+                  {status === "completed"
+                    ? "Transcripción completada. Encuéntrala en tu biblioteca."
+                    : error ?? "No se pudo completar la transcripción."}
+                </div>
+                <button
+                  type="button"
+                  onClick={resetFlow}
+                  style={{
+                    borderRadius: "999px",
+                    border: "1px solid rgba(148,163,184,0.35)",
+                    background: "transparent",
+                    color: "#cbd5f5",
+                    padding: "0.55rem 1.4rem",
+                    cursor: "pointer",
+                  }}
+                >
+                  Nuevo audio
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="card" style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+            <h3 style={{ margin: 0 }}>Detalles de la transcripción</h3>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem" }}>
               <label style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
                 Idioma
                 <select value={language} onChange={(event) => setLanguage(event.target.value)}>
@@ -105,22 +208,12 @@ export function TranscribirPage({ onLibraryRefresh, requireAuth = true }: Props)
                 </select>
               </label>
               <label style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                Perfil de calidad
-                <select value={profile} onChange={(event) => setProfile(event.target.value)}>
-                  {qualityProfiles().map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.title}
-                    </option>
-                  ))}
-                </select>
+                Título
+                <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Reunión semanal" />
               </label>
               <label style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
                 Etiquetas
                 <input value={tags} onChange={(event) => setTags(event.target.value)} placeholder="reunión, sprint, tareas" />
-              </label>
-              <label style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                Título
-                <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Reunión semanal" />
               </label>
             </div>
             <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap" }}>
@@ -133,40 +226,35 @@ export function TranscribirPage({ onLibraryRefresh, requireAuth = true }: Props)
                 Marcas temporales por palabra
               </label>
             </div>
-            <Uploader onSelect={handleSubmit} busy={status === "uploading" || status === "streaming"} />
             {status === "uploading" && (
-              <div style={{ color: "#cbd5f5" }}>Subiendo... {uploadProgress}%</div>
-            )}
-            {status === "completed" && completedPayload && (
-              <div style={{ color: "#22c55e" }}>
-                ¡Listo! Exporta a TXT, Markdown o SRT desde la Biblioteca. Job: {completedPayload["job_id"] as string}
+              <div style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.75rem",
+                background: "rgba(56,189,248,0.12)",
+                borderRadius: "12px",
+                padding: "0.75rem 1rem",
+                color: "#e0f2fe",
+              }}>
+                <span style={{ fontSize: "0.8rem", letterSpacing: "0.05em" }}>Subiendo {uploadProgress}%</span>
+                <div style={{ flex: 1, height: "6px", background: "rgba(148,163,184,0.3)", borderRadius: "999px" }}>
+                  <div
+                    style={{
+                      width: `${uploadProgress}%`,
+                      height: "100%",
+                      borderRadius: "999px",
+                      background: "linear-gradient(90deg, #38bdf8, #60a5fa)",
+                      transition: "width 0.2s ease",
+                    }}
+                  />
+                </div>
               </div>
-            )}
-            {status === "error" && error && (
-              <div style={{ color: "#fca5a5" }}>{error}</div>
-            )}
-            {(status === "completed" || status === "error") && (
-              <button
-                type="button"
-                onClick={resetFlow}
-                style={{
-                  borderRadius: "999px",
-                  border: "1px solid rgba(148,163,184,0.35)",
-                  background: "transparent",
-                  color: "#cbd5f5",
-                  padding: "0.65rem 1.5rem",
-                  cursor: "pointer",
-                  alignSelf: "flex-start",
-                }}
-              >
-                Empezar otra transcripción
-              </button>
             )}
           </div>
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-          {requireAuth && <AuthPanel onAuthenticated={onLibraryRefresh} onLogout={onLibraryRefresh} />}
+        <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem", minHeight: "100%" }}>
           <SseViewer tokens={tokens} status={status} error={error} onRetry={() => jobId && startStream({ job_id: jobId })} />
+          {requireAuth && <AuthPanel onAuthenticated={onLibraryRefresh} onLogout={onLibraryRefresh} />}
         </div>
       </section>
     </div>
