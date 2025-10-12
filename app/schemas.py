@@ -81,3 +81,36 @@ class UserRead(BaseModel):
 class TranscriptResponse(BaseModel):
     job_id: str
     status: str
+    quality_profile: Optional[str] = None
+
+
+class TranscriptSummary(BaseModel):
+    id: int
+    job_id: str
+    status: str
+    title: Optional[str]
+    language: Optional[str]
+    quality_profile: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+    completed_at: Optional[datetime]
+    duration_seconds: Optional[float]
+    tags: List[str] = []
+
+    class Config:
+        orm_mode = True
+
+
+class TranscriptDetail(TranscriptSummary):
+    audio_key: str
+    transcript_key: Optional[str]
+    transcript_url: Optional[str]
+    segments: List[dict] = []
+    error_message: Optional[str]
+    profile_id: Optional[int]
+
+
+class TranscriptExportRequest(BaseModel):
+    destination: str
+    format: str = "txt"
+    note: Optional[str] = None

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -26,7 +24,7 @@ class DummyModel:
         self.calls = [(args, kwargs)]
 
     def transcribe(self, path: str, language: str | None = None):
-        segments = [DummySegment("Hi"), DummySegment("!")]
+        segments = [DummySegment("Hi", 0.0, 0.5), DummySegment("!", 0.5, 0.75)]
         info = SimpleNamespace(duration=1.0, language=language or "en")
         return segments, info
 
@@ -34,11 +32,15 @@ class DummyModel:
 def test_transcription_streams_delta_tokens(monkeypatch):
     service = TranscriptionService(quantization="float16", model_factory=lambda *args, **kwargs: DummyModel(*args, **kwargs))
 
-    tokens: list[str] = []
+    tokens: list[dict] = []
     result = service.transcribe(Path("dummy.wav"), token_callback=tokens.append)
 
     assert "Hi!" == result["text"]
-    assert tokens == ["H", "i", "!"]
+    assert tokens == [
+        {"text": "H", "t0": 0.0, "t1": 0.5},
+        {"text": "i", "t0": 0.0, "t1": 0.5},
+        {"text": "!", "t0": 0.5, "t1": 0.75},
+    ]
 
 
 def test_invalid_quantization():

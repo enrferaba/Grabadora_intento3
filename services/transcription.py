@@ -1,6 +1,4 @@
-"""Wrapper around faster-whisper with streaming token emission."""
-from __future__ import annotations
-
+import json
 import logging
 from pathlib import Path
 from typing import Any, Callable, Optional, TYPE_CHECKING
@@ -19,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 Quantization = str
-TokenCallback = Callable[[str], None]
+TokenCallback = Callable[[dict[str, Any]], None]
 
 
 class TranscriptionService:
@@ -80,12 +78,19 @@ class TranscriptionService:
 
         transcript_tokens: list[str] = []
         for segment in segments:
+            start = float(getattr(segment, "start", 0.0) or 0.0)
+            end = float(getattr(segment, "end", start) or start)
             for token in segment.tokens:
-                text = token.text or ""
-                if text:
-                    transcript_tokens.append(text)
-                    if token_callback:
-                        token_callback(text)
+                text = getattr(token, "text", "") or ""
+                if not text:
+                    continue
+                transcript_tokens.append(text)
+                if token_callback:
+                    payload = {"text": text, "t0": start, "t1": end}
+                    try:
+                        token_callback(payload)
+                    except Exception:  # pragma: no cover - defensive logging
+                        logger.exception("Token callback raised", extra={"payload": json.dumps(payload)})
 
         transcript_text = "".join(transcript_tokens).strip()
         logger.info(
@@ -101,14 +106,15 @@ class TranscriptionService:
             "text": transcript_text,
             "segments": [
                 {
-                    "start": segment.start,
-                    "end": segment.end,
-                    "text": segment.text,
+                    "start": float(getattr(segment, "start", 0.0) or 0.0),
+                    "end": float(getattr(segment, "end", 0.0) or 0.0),
+                    "text": getattr(segment, "text", ""),
                 }
                 for segment in segments
             ],
             "language": info.language,
-            "duration": info.duration,
+            "duration": getattr(info, "duration", None),
         }
 
-        
+
+__all__ = ["TranscriptionService", "Quantization"]

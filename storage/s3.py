@@ -3,8 +3,9 @@ from __future__ import annotations
 
 import io
 import logging
+from datetime import datetime
 from pathlib import Path
-from typing import BinaryIO, Dict, Optional
+from typing import BinaryIO, Dict, List, Optional
 
 try:  # pragma: no cover - optional dependency
     import boto3
@@ -100,3 +101,53 @@ class S3StorageClient:
             raise
         body = response["Body"].read()
         return body.decode("utf-8")
+
+    def list_transcripts(self, prefix: Optional[str] = None) -> List[dict]:
+        if self._client is None:
+            store = self._ensure_memory_bucket(self.transcripts_bucket)
+            items = []
+            for key, payload in store.items():
+                if prefix and not key.startswith(prefix):
+                    continue
+                items.append({
+                    "key": key,
+                    "size": len(payload),
+                    "last_modified": datetime.utcnow(),
+                })
+            return items
+        paginator = self._client.get_paginator("list_objects_v2")
+        operation_parameters = {"Bucket": self.transcripts_bucket}
+        if prefix:
+            operation_parameters["Prefix"] = prefix
+        items: List[dict] = []
+        for page in paginator.paginate(**operation_parameters):
+            for obj in page.get("Contents", []):
+                items.append({
+                    "key": obj["Key"],
+                    "size": obj.get("Size", 0),
+                    "last_modified": obj.get("LastModified"),
+                })
+        return items
+
+    def create_presigned_url(self, object_name: str, expires_in: int = 3600) -> Optional[str]:
+        if self._client is None:
+            store = self._ensure_memory_bucket(self.transcripts_bucket)
+            if object_name not in store:
+                return None
+            return f"memory://{self.transcripts_bucket}/{object_name}"
+        try:
+            return self._client.generate_presigned_url(
+                "get_object",
+                Params={"Bucket": self.transcripts_bucket, "Key": object_name},
+                ExpiresIn=expires_in,
+            )
+        except ClientError:
+            logger.exception("Unable to generate presigned URL", extra={"key": object_name})
+            return None
+
+    def delete_transcript(self, object_name: str) -> None:
+        if self._client is None:
+            store = self._ensure_memory_bucket(self.transcripts_bucket)
+            store.pop(object_name, None)
+            return
+        self._client.delete_object(Bucket=self.transcripts_bucket, Key=object_name)
