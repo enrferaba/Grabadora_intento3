@@ -4,7 +4,7 @@ Grabadora es una plataforma de transcripción en streaming pensada para uso real
 
 ## ¿Qué hay de nuevo en este intento?
 
-- **SPA lista para usuarios**: la carpeta `frontend/` ahora es una aplicación React/Vite con vistas de Transcribir, Grabar y Biblioteca. Incluye autenticación JWT, drag & drop, monitor de micro, visualizador SSE y exportaciones.
+- **SPA lista para usuarios**: la carpeta `frontend/` incluye la SPA empaquetada en `dist/` (sin dependencias de Node) y el código fuente React/Vite (`src/`) por si quieres personalizarla. Transcribir, Grabar y Biblioteca funcionan con autenticación JWT, drag & drop, monitor de micro, SSE y exportaciones.
 - **Biblioteca con base de datos**: se introdujo el modelo `Transcript` y endpoints REST (`GET /transcripts`, `GET /transcripts/{id}`, `GET /transcripts/{id}/download`, `POST /transcripts/{id}/export`) para listar, buscar y descargar transcripciones finales.
 - **Streaming enriquecido**: los eventos `delta` del SSE son JSON con `{text, t0, t1}`; el evento `completed` añade duración, idioma y perfil de calidad. Las pruebas se actualizaron para validar el nuevo contrato.
 - **Worker con metadatos persistentes**: cada job registra progreso, perfil de calidad y segmentos en la base de datos, de modo que la Biblioteca pueda mostrar estado, duración y exportaciones aunque el worker se ejecute en otra máquina.
@@ -19,7 +19,7 @@ Grabadora es una plataforma de transcripción en streaming pensada para uso real
 | **faster-whisper** | `services/transcription.py` encapsula la carga del modelo y emite tokens con metadatos de tiempo. Soporta cuantizaciones `float32`, `float16` e `int8`. |
 | **S3/MinIO** | `storage/s3.py` guarda audios y transcripts, lista objetos y genera URLs firmadas. Incluye modo memoria para pruebas. |
 | **PostgreSQL (SQLAlchemy + Alembic)** | Modelos `User`, `Profile`, `UsageMeter` y `Transcript`. Nueva migración `20240605_02_transcripts` crea la tabla de biblioteca. |
-| **Frontend Vite** | SPA con React Router, autenticación persistente en `localStorage`, uploader con drag & drop, grabador con `MediaRecorder` y biblioteca con búsqueda en vivo. |
+| **Frontend Vite** | SPA con React/Vite, autenticación en `localStorage`, uploader drag & drop, grabador con `MediaRecorder` y biblioteca con búsqueda. Se distribuye un build estático en `frontend/dist/` para que `/` funcione sin pasos extra. |
 | **Observabilidad** | Métricas expuestas con `prometheus-fastapi-instrumentator`, dashboards de Grafana y logging JSON via `structlog`. |
 
 ## Requisitos previos
@@ -44,7 +44,7 @@ Consulta `app/config.py` y `.env.example` para la lista completa.
 ## Puesta en marcha recomendada (Docker Compose)
 
 1. Copia las variables de ejemplo: `cp .env.example .env` y ajusta credenciales S3/JWT si es necesario.
-2. Compila el frontend: `cd frontend && npm install && npm run build && cd ..` (el build quedará en `frontend/dist/`).
+2. (Opcional) Recompila la SPA si hiciste cambios en `frontend/src`: `cd frontend && npm install && npm run build && cd ..`.
 3. Levanta toda la plataforma: `docker compose up --build`.
 4. Abre `http://localhost:8000/` para acceder a la SPA. La API, worker, Redis, PostgreSQL, MinIO, Prometheus y Grafana se montan automáticamente.
 
@@ -115,7 +115,6 @@ deploy/             # Prometheus, Grafana y utilidades
 Si ya tienes Node y Docker instalados, el flujo más corto es:
 
 ```bash
-cd frontend && npm install && npm run build && cd ..
 docker compose up --build
 ```
 
