@@ -100,7 +100,15 @@ else:
             return
         settings = get_settings()
         try:
-            factory, engine = _bootstrap_factory(settings.database_url)
+            primary_url = settings.database_url
+            sync_override = os.getenv("SYNC_DATABASE_URL")
+            if sync_override and primary_url.startswith("sqlite+aiosqlite"):
+                database_url = sync_override
+            else:
+                database_url = primary_url
+            if database_url.startswith("sqlite+aiosqlite"):
+                database_url = database_url.replace("sqlite+aiosqlite", "sqlite", 1)
+            factory, engine = _bootstrap_factory(database_url)
             # Touch the connection early to surface connectivity issues immediately.
             with engine.connect():
                 pass

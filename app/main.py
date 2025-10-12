@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any, AsyncGenerator, Dict, List, Optional
 try:  # pragma: no cover - optional dependency
     from fastapi import Body, Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
     from fastapi.middleware.cors import CORSMiddleware
-    from fastapi.responses import HTMLResponse, JSONResponse, Response
+    from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
     from fastapi.staticfiles import StaticFiles
     from starlette.requests import ClientDisconnect
 except ImportError:  # pragma: no cover
@@ -51,6 +51,10 @@ except ImportError:  # pragma: no cover
 
     class Response(dict):  # type: ignore
         pass
+
+    class FileResponse(dict):  # type: ignore
+        def __init__(self, *args, **kwargs) -> None:
+            raise RuntimeError("FastAPI is required for static file responses")
 
     class Query:  # type: ignore
         def __init__(self, default=None, *_, **__):
@@ -521,7 +525,6 @@ if app is not None:
 
     if StaticFiles is not None and FRONTEND_DIST.exists():
         app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="spa-assets")
-        app.mount("/", StaticFiles(directory=FRONTEND_DIST, html=True), name="spa")
         SPA_MOUNTED = True
 
     @app.exception_handler(Exception)
@@ -824,28 +827,21 @@ if app is not None:
         _sample_gpu_usage()
         return JSONResponse({"status": "ok", "time": datetime.utcnow().isoformat()})
 
-    if not SPA_MOUNTED:
+    if SPA_MOUNTED:
         @app.get("/", response_class=HTMLResponse)
         async def root() -> HTMLResponseType:
             return _spa_index()
 
-        @app.get("/{full_path:path}", response_class=HTMLResponse)
-        async def spa_router(full_path: str) -> HTMLResponseType:
-            reserved_prefixes = (
-                "docs",
-                "redoc",
-                "openapi.json",
-                "metrics",
-                "healthz",
-                "auth",
-                "users",
-                "transcribe",
-                "transcripts",
-                "jobs",
-            )
-            if any(full_path.startswith(prefix) for prefix in reserved_prefixes):
-                raise HTTPException(status_code=404, detail="Not Found")
+        @app.get("/{full_path:path}")
+        async def spa_router(full_path: str) -> ResponseType:
+            candidate = FRONTEND_DIST / full_path
+            if full_path and candidate.exists() and candidate.is_file():
+                if isinstance(FileResponse, type):
+                    return FileResponse(candidate)
+                return HTMLResponse(candidate.read_text(encoding="utf-8"))
             return _spa_index()
+
+        app.mount("/", StaticFiles(directory=FRONTEND_DIST, html=True), name="spa")
 
 
 def create_app() -> FastAPIApp:
