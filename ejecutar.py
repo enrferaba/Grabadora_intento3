@@ -116,8 +116,10 @@ def main() -> None:
 def _resolve_mode(mode: str) -> str:
     if mode in {"local", "stack"}:
         return mode
-    backend = os.getenv("GRABADORA_QUEUE_BACKEND", "auto").lower()
-    return "local" if backend == "memory" else "stack"
+    backend = os.getenv("GRABADORA_QUEUE_BACKEND", "").lower()
+    if backend in {"redis", "stack"}:
+        return "stack"
+    return "local"
 
 
 def _apply_environment_for_mode(mode: str) -> None:
@@ -125,8 +127,57 @@ def _apply_environment_for_mode(mode: str) -> None:
         os.environ.setdefault("GRABADORA_QUEUE_BACKEND", "memory")
         sqlite_path = Path("grabadora.db").resolve()
         os.environ.setdefault("GRABADORA_DATABASE_URL", f"sqlite:///{sqlite_path}")
+        os.environ.setdefault("GRABADORA_FRONTEND_ORIGIN", "http://localhost:5173")
     else:
         os.environ.setdefault("GRABADORA_QUEUE_BACKEND", "redis")
+    _refresh_settings_cache()
+    if mode == "stack":
+        _validate_stack_runtime()
+
+
+def _refresh_settings_cache() -> None:
+    try:
+        from app.config import get_settings  # type: ignore
+    except Exception:
+        return
+    cache_clear = getattr(get_settings, "cache_clear", None)
+    if callable(cache_clear):
+        cache_clear()
+
+
+def _validate_stack_runtime() -> None:
+    try:
+        from app.config import get_settings  # type: ignore
+    except Exception as exc:
+        raise SystemExit("No se pudo cargar la configuración del proyecto.") from exc
+
+    settings = get_settings()
+
+    try:
+        from redis import Redis  # type: ignore
+    except ImportError as exc:
+        raise SystemExit("Modo 'stack' requiere la librería redis instalada.") from exc
+
+    try:
+        redis_conn = Redis.from_url(settings.redis_url)
+        redis_conn.ping()
+    except Exception as exc:
+        raise SystemExit(f"Redis no responde en {settings.redis_url}: {exc}") from exc
+
+    try:
+        from rq import Worker  # type: ignore
+    except ImportError as exc:
+        raise SystemExit("Modo 'stack' requiere rq y un worker en ejecución.") from exc
+
+    try:
+        workers = Worker.all(connection=redis_conn)
+    except Exception as exc:
+        raise SystemExit(f"No se pudieron listar los workers de RQ: {exc}") from exc
+
+    if not workers:
+        raise SystemExit(
+            "No se detectaron workers de RQ activos. Arranca 'python -m taskqueue.worker' o el servicio correspondiente antes de usar --mode stack."
+        )
 
 
 if __name__ == "__main__":

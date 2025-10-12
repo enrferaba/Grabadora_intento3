@@ -23,7 +23,9 @@ htmlcov/
 pytest_cache/
 
 # Local data and runtime artifacts
-storage/
+storage/*
+!storage/__init__.py
+!storage/s3.py
 transcripts/
 grabadora.db
 
