@@ -1,7 +1,7 @@
 import { Outlet, useLocation } from "react-router-dom";
 import { NavigationBar } from "./NavigationBar";
 import { Footer } from "./Footer";
-import { HeroBanner } from "@/components/home/HeroBanner";
+import { HeroBanner } from "@/app/components/HeroBanner";
 
 export function AppShell() {
   const location = useLocation();

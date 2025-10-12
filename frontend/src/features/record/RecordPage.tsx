@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { qualityProfiles, streamTranscription, uploadTranscription } from "@/lib/api";
-import { AuthPanel } from "@/components/AuthPanel";
-import { SseViewer } from "@/components/SseViewer";
+import { AuthPanel } from "@/features/account/components/AuthPanel";
+import { SseViewer } from "@/features/transcribe/components/SseViewer";
 
 interface Props {
   onLibraryRefresh?: () => void;
 }
 
-export function GrabarPage({ onLibraryRefresh }: Props) {
+export function RecordPage({ onLibraryRefresh }: Props) {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);

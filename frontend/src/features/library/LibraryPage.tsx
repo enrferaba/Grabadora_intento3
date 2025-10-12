@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import type { TranscriptDetail, TranscriptSummary } from "@/lib/api";
 import { downloadTranscript, exportTranscript, getTranscript, listTranscripts } from "@/lib/api";
-import { TranscriptCard } from "@/components/TranscriptCard";
+import { TranscriptCard } from "@/features/library/components/TranscriptCard";
 
-export function BibliotecaPage() {
+export function LibraryPage() {
   const [items, setItems] = useState<TranscriptSummary[]>([]);
   const [detail, setDetail] = useState<TranscriptDetail | null>(null);
   const [search, setSearch] = useState("");

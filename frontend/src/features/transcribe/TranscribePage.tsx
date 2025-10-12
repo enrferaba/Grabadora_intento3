@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { qualityProfiles, streamTranscription, uploadTranscription } from "@/lib/api";
-import { AuthPanel } from "@/components/AuthPanel";
-import { SseViewer } from "@/components/SseViewer";
-import { Uploader } from "@/components/Uploader";
+import { AuthPanel } from "@/features/account/components/AuthPanel";
+import { SseViewer } from "@/features/transcribe/components/SseViewer";
+import { Uploader } from "@/features/transcribe/components/Uploader";
 
 interface Props {
   onLibraryRefresh?: () => void;
@@ -11,7 +11,7 @@ interface Props {
 
 type FlowStatus = "idle" | "uploading" | "streaming" | "completed" | "error" | "recording";
 
-export function TranscribirPage({ onLibraryRefresh, requireAuth = true }: Props) {
+export function TranscribePage({ onLibraryRefresh, requireAuth = true }: Props) {
   const [language, setLanguage] = useState("auto");
   const [profile, setProfile] = useState("balanced");
   const [tags, setTags] = useState("reunión, minutos");
@@ -75,14 +75,14 @@ export function TranscribirPage({ onLibraryRefresh, requireAuth = true }: Props)
     }
   }
 
-    function resetFlow() {
-      stopStreamRef.current?.();
-      setTokens([]);
-      setStatus("idle");
-      setError(null);
-      setJobId(null);
-      setCompletedPayload(null);
-    }
+  function resetFlow() {
+    stopStreamRef.current?.();
+    setTokens([]);
+    setStatus("idle");
+    setError(null);
+    setJobId(null);
+    setCompletedPayload(null);
+  }
 
   const statusPalette: Record<FlowStatus, string> = {
     idle: "rgba(148, 163, 184, 0.45)",

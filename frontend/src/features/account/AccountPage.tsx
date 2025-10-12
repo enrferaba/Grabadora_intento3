@@ -40,7 +40,7 @@ function FormWrapper({
   );
 }
 
-export function CuentaPage({ onAuthenticated }: Props) {
+export function AccountPage({ onAuthenticated }: Props) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const focusStep = useMemo<Step>(() => {

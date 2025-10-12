@@ -4,12 +4,13 @@ Grabadora es una plataforma de transcripción en streaming pensada para uso real
 
 ## ¿Qué hay de nuevo en este intento?
 
-- **SPA lista para usuarios**: la carpeta `frontend/` incluye la SPA empaquetada en `dist/` (sin dependencias de Node) y el código fuente React/Vite (`src/`) por si quieres personalizarla. Transcribir, Grabar y Biblioteca funcionan con autenticación JWT, drag & drop, monitor de micro, SSE y exportaciones.
+- **SPA lista para usuarios**: la carpeta `frontend/` incluye la SPA empaquetada en `dist/` (sin dependencias de Node) y el código fuente React/Vite (`src/`) organizado en `app/`, `features/` y `lib/` para que puedas extender componentes sin perderte. Transcribir, Grabar y Biblioteca funcionan con autenticación JWT, drag & drop, monitor de micro, SSE y exportaciones.
 - **Biblioteca con base de datos**: se introdujo el modelo `Transcript` y endpoints REST (`GET /transcripts`, `GET /transcripts/{id}`, `GET /transcripts/{id}/download`, `POST /transcripts/{id}/export`) para listar, buscar y descargar transcripciones finales.
 - **Streaming enriquecido**: los eventos `delta` del SSE son JSON con `{text, t0, t1}`; el evento `completed` añade duración, idioma y perfil de calidad. Las pruebas se actualizaron para validar el nuevo contrato.
 - **Cola en memoria integrada**: si Redis o RQ no están disponibles, la API activa automáticamente una cola en memoria que ejecuta los trabajos en segundo plano y mantiene los SSE funcionando para `python ejecutar.py` y entornos sin Docker.
 - **Worker con metadatos persistentes**: cada job registra progreso, perfil de calidad y segmentos en la base de datos, de modo que la Biblioteca pueda mostrar estado, duración y exportaciones aunque el worker se ejecute en otra máquina.
 - **Frontend servido desde FastAPI**: el build de Vite se expone desde `/` y se monta `/assets` como estático. Si no se ha compilado la SPA, FastAPI cae en la landing básica para debugging.
+- **Chequeo automático de entorno**: `doctor.py` verifica dependencias de Python, Docker, Node y estado del frontend antes de lanzar la app, y `ejecutar.py` puede invocarlo automáticamente para evitar fallos por librerías ausentes.
 
 ## Arquitectura rápida
 
@@ -42,8 +43,11 @@ Todas las variables usan el prefijo `GRABADORA_`. Las más relevantes:
 
 Consulta `app/config.py` y `.env.example` para la lista completa.
 
+> Consejo: ejecuta `python doctor.py --install-missing --fix-frontend` para comprobar e instalar todas las dependencias antes del primer arranque.
+
 ## Puesta en marcha recomendada (Docker Compose)
 
+0. (Opcional pero recomendable) Verifica dependencias con `python doctor.py`. Añade `--install-missing --fix-frontend` si quieres que instale lo necesario automáticamente.
 1. Copia las variables de ejemplo: `cp .env.example .env` y ajusta credenciales S3/JWT si es necesario.
 2. (Opcional) Recompila la SPA si hiciste cambios en `frontend/src`: `cd frontend && npm install && npm run build && cd ..`.
 3. Levanta toda la plataforma: `docker compose up --build`.
@@ -136,3 +140,7 @@ Consulta `ejecutar.md` para una versión abreviada (un único comando) y sugeren
 - **`RuntimeError: redis package is not installed`**: ya no deberías verlo; la
   API usa la cola en memoria cuando faltan Redis/RQ. Si quieres forzar Redis,
   instala las dependencias (`pip install redis rq`) o levanta el stack con Docker.
+- **Avisos de Pylance/VSCode sobre imports faltantes (`redis`, `rq`, `boto3`,
+  `pytest`, etc.)**: se deben a paquetes opcionales que aún no están instalados
+  en tu entorno local. Ejecuta `python doctor.py --install-missing` para resolverlos
+  automáticamente o instala los paquetes que se indiquen en la salida del doctor.
