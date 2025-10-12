@@ -4,7 +4,32 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TypeAlias
+
+try:
+    from typing import TypeAlias  # type: ignore[attr-defined]
+except ImportError:  # pragma: no cover - Python < 3.10
+    from typing_extensions import TypeAlias  # type: ignore[assignment]
+
+try:
+    from typing import TypeAlias  # type: ignore[attr-defined]
+except ImportError:  # pragma: no cover - Python < 3.10
+    from typing_extensions import TypeAlias  # type: ignore[assignment]
+
+try:
+    from typing import TypeAlias  # type: ignore[attr-defined]
+except ImportError:  # pragma: no cover - Python < 3.10
+    from typing_extensions import TypeAlias  # type: ignore[assignment]
+
+try:
+    from typing import TypeAlias  # type: ignore[attr-defined]
+except ImportError:  # pragma: no cover - Python < 3.10
+    from typing_extensions import TypeAlias  # type: ignore[assignment]
+
+try:
+    from typing import TypeAlias  # type: ignore[attr-defined]
+except ImportError:  # pragma: no cover - Python < 3.10
+    from typing_extensions import TypeAlias  # type: ignore[assignment]
 
 try:
     from typing import TypeAlias  # type: ignore[attr-defined]
