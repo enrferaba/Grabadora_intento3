@@ -6,6 +6,11 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
+try:
+    from typing import TypeAlias  # type: ignore[attr-defined]
+except ImportError:  # pragma: no cover - Python < 3.10
+    from typing_extensions import TypeAlias  # type: ignore[assignment]
+
 from .models import TranscriptionStatus
 
 try:  # pragma: no cover - optional dependency
@@ -85,6 +90,8 @@ except ImportError:  # pragma: no cover
                 return cls(**obj)
             return cls.from_orm(obj)
 
+EmailStrType: TypeAlias = EmailStr  # type: ignore[misc]
+
 
 def _enable_from_attributes(cls):
     if not _HAVE_PYDANTIC:
@@ -121,14 +128,14 @@ class UsageMeterRead(BaseModel):
 
 
 class UserCreate(BaseModel):
-    email: EmailStr
+    email: EmailStrType
     password: str
 
 
 @_enable_from_attributes
 class UserRead(BaseModel):
     id: int
-    email: EmailStr
+    email: EmailStrType
     is_active: bool
     created_at: datetime
     profiles: List[ProfileRead] = Field(default_factory=list)

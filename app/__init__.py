@@ -55,24 +55,21 @@ def _patch_forward_ref_recursive_guard() -> None:
     cuando esa firma extendida está presente.
     """
 
-    signature = inspect.signature(ForwardRef._evaluate)
+    original = ForwardRef._evaluate
+    signature = inspect.signature(original)
     parameters = signature.parameters
     if "recursive_guard" not in parameters:
         return
 
-    original = ForwardRef._evaluate
+    def _evaluate(*args, **kwargs):  # type: ignore[override]
+        bound = signature.bind_partial(*args, **kwargs)
 
-    def _evaluate(
-        self,  # type: ignore[override]
-        globalns,
-        localns,
-        type_params=None,
-        *,
-        recursive_guard=None,
-    ):
+        recursive_guard = bound.arguments.get("recursive_guard")
         if recursive_guard is None:
             recursive_guard = set()
-        return original(self, globalns, localns, type_params, recursive_guard=recursive_guard)
+            bound.arguments["recursive_guard"] = recursive_guard
+
+        return original(*bound.args, **bound.kwargs)
 
     ForwardRef._evaluate = _evaluate  # type: ignore[assignment]
 
