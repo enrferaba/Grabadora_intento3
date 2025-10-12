@@ -13,6 +13,12 @@ interface Props {
 type FlowStatus = "idle" | "uploading" | "streaming" | "completed" | "error" | "recording";
 type TranscriptFormat = "txt" | "md" | "srt";
 
+function tokensFromSnapshot(text: string): Array<{ text: string; t0: number; t1: number }> {
+  if (!text) return [];
+  const parts = text.match(/\s+|\S+/g) ?? [];
+  return parts.map((chunk, index) => ({ text: chunk, t0: index, t1: index }));
+}
+
 export function TranscribePage({ onLibraryRefresh }: Props) {
   const navigate = useNavigate();
   const [language, setLanguage] = useState("auto");
@@ -55,6 +61,11 @@ export function TranscribePage({ onLibraryRefresh }: Props) {
     stopStreamRef.current = streamTranscription(job.job_id, {
       onDelta(delta) {
         setTokens((previous) => [...previous, delta]);
+      },
+      onSnapshot(payload) {
+        const text = typeof payload.text === "string" ? payload.text : "";
+        setTokens(tokensFromSnapshot(text));
+        setHeartbeatMeta((previous) => ({ ...(previous ?? {}), progress: payload.progress }));
       },
       onCompleted(payload) {
         setStatus("completed");

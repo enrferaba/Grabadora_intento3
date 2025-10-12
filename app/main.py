@@ -7,7 +7,7 @@ import logging
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import AsyncGenerator, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, AsyncGenerator, Dict, List, Optional
 
 try:  # pragma: no cover - optional dependency
     from fastapi import Body, Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
@@ -70,6 +70,17 @@ except ImportError:  # pragma: no cover
 
     class ClientDisconnect(Exception):  # type: ignore
         pass
+
+if TYPE_CHECKING:  # pragma: no cover - typing helpers for optional FastAPI dependency
+    from fastapi import FastAPI as FastAPIApp
+    from fastapi.responses import HTMLResponse as HTMLResponseType
+    from fastapi.responses import JSONResponse as JSONResponseType
+    from fastapi.responses import Response as ResponseType
+else:  # graceful fallbacks for static analysis when FastAPI is unavailable at runtime
+    FastAPIApp = Any
+    HTMLResponseType = Any
+    JSONResponseType = Any
+    ResponseType = Any
 
 try:  # pragma: no cover - optional dependency
     from sse_starlette.sse import EventSourceResponse
@@ -181,7 +192,15 @@ def _obtain_queue() -> tuple[object, bool]:
     """Return a queue instance and whether it uses the in-memory fallback."""
 
     global _fallback_queue
+    preferred_backend = getattr(settings, "queue_backend", "auto")
+    if preferred_backend == "memory":
+        if _fallback_queue is None:
+            _fallback_queue = InMemoryQueue(settings.rq_default_queue, connection=InMemoryRedis.from_url("memory://local"))
+        return _fallback_queue, True
+    force_redis = preferred_backend == "redis"
     if RedisClient is None or RQQueue is None:  # dependencies missing entirely
+        if force_redis:
+            raise HTTPException(status_code=503, detail="Redis backend requerido pero no disponible")
         if _fallback_queue is None:
             _fallback_queue = InMemoryQueue(settings.rq_default_queue, connection=InMemoryRedis.from_url("memory://local"))
         return _fallback_queue, True
@@ -192,6 +211,11 @@ def _obtain_queue() -> tuple[object, bool]:
             redis_conn.ping()
         return RQQueue(settings.rq_default_queue, connection=redis_conn), False
     except Exception as exc:
+        if force_redis:
+            logger.error(
+                "Redis backend required but unavailable", extra={"detail": str(exc)}
+            )
+            raise HTTPException(status_code=503, detail="Redis backend no disponible") from exc
         logger.warning(
             "Redis/RQ unavailable, enabling in-memory queue fallback", extra={"detail": str(exc)}
         )
@@ -268,16 +292,23 @@ if hasattr(structlog, "processors"):
 structlog.configure(processors=processors)
 logger = structlog.get_logger(__name__)
 
-app: FastAPI | None = None  # type: ignore[misc]
+app: FastAPIApp | None = None  # type: ignore[misc]
 if FastAPI is not None:
     app = FastAPI(title=settings.api_title, version=settings.api_version, description=settings.api_description)
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    allow_origins: List[str] = []
+    frontend_origin = getattr(settings, "frontend_origin", None)
+    if frontend_origin:
+        allow_origins = ["*"] if frontend_origin == "*" else [frontend_origin]
+    elif getattr(settings, "queue_backend", "auto") == "memory":
+        allow_origins = ["*"]
+    if allow_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=allow_origins,
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
     Instrumentator(namespace=settings.prometheus_namespace).instrument(app).expose(app)
 
 API_ERRORS = Counter("api_errors_total", "Total API errors", namespace=settings.prometheus_namespace)
@@ -359,7 +390,7 @@ def _transcript_to_detail(transcript: Transcript, *, include_url: bool = True) -
     )
 
 
-def _spa_index() -> HTMLResponse:
+def _spa_index() -> HTMLResponseType:
     if FRONTEND_DIST.exists():
         return HTMLResponse((FRONTEND_DIST / "index.html").read_text(encoding="utf-8"))
     if FRONTEND_SOURCE.exists():
@@ -388,6 +419,8 @@ async def _stream_job(
         return
 
     last_progress = int(meta.get("progress", 0) or 0)
+    last_snapshot_progress = last_progress
+    snapshot_sent = last_progress == 0
     loop = asyncio.get_running_loop()
     heartbeat_interval = 10.0
     last_heartbeat = loop.time()
@@ -422,6 +455,25 @@ async def _stream_job(
             token_payload_text = token_payload
 
         progress_value = int(meta.get("progress", 0) or 0)
+        snapshot_text = meta.get("transcript_so_far")
+        if snapshot_text and (not snapshot_sent or progress_value - last_snapshot_progress >= 25):
+            segments_payload = meta.get("segments_partial")
+            if isinstance(segments_payload, str):
+                try:
+                    segments_payload = json.loads(segments_payload)
+                except json.JSONDecodeError:
+                    segments_payload = None
+            snapshot_body: Dict[str, Any] = {
+                "job_id": job.id,
+                "text": snapshot_text,
+                "progress": progress_value,
+            }
+            if isinstance(segments_payload, list):
+                snapshot_body["segments"] = segments_payload
+            yield {"event": "snapshot", "data": json.dumps(snapshot_body)}
+            snapshot_sent = True
+            last_snapshot_progress = progress_value
+
         if progress_value > last_progress and token_payload_text:
             last_progress = progress_value
             yield {"event": "delta", "data": token_payload_text}
@@ -473,7 +525,7 @@ if app is not None:
         SPA_MOUNTED = True
 
     @app.exception_handler(Exception)
-    async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponseType:
         API_ERRORS.inc()
         logger.exception("Unhandled exception", exc_info=exc)
         return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
@@ -715,7 +767,7 @@ if app is not None:
         transcript_id: int,
         format: str = Query("txt", enum=["txt", "md", "srt"]),
         user: AuthenticatedUser = Depends(get_current_user),
-    ) -> Response:
+    ) -> ResponseType:
         with session_scope() as session:
             transcript = session.query(Transcript).filter(Transcript.id == transcript_id, Transcript.user_id == user.id).one_or_none()
             if transcript is None or not transcript.transcript_key:
@@ -743,7 +795,7 @@ if app is not None:
         transcript_id: int,
         payload: TranscriptExportRequest = Body(...),
         user: AuthenticatedUser = Depends(get_current_user),
-    ) -> JSONResponse:
+    ) -> JSONResponseType:
         allowed_destinations = {"notion", "trello", "webhook"}
         if payload.destination not in allowed_destinations:
             raise HTTPException(status_code=400, detail="Unsupported destination")
@@ -768,17 +820,17 @@ if app is not None:
         )
 
     @app.get("/healthz")
-    async def healthcheck() -> JSONResponse:
+    async def healthcheck() -> JSONResponseType:
         _sample_gpu_usage()
         return JSONResponse({"status": "ok", "time": datetime.utcnow().isoformat()})
 
     if not SPA_MOUNTED:
         @app.get("/", response_class=HTMLResponse)
-        async def root() -> HTMLResponse:
+        async def root() -> HTMLResponseType:
             return _spa_index()
 
         @app.get("/{full_path:path}", response_class=HTMLResponse)
-        async def spa_router(full_path: str) -> HTMLResponse:
+        async def spa_router(full_path: str) -> HTMLResponseType:
             reserved_prefixes = (
                 "docs",
                 "redoc",
@@ -796,7 +848,7 @@ if app is not None:
             return _spa_index()
 
 
-def create_app() -> FastAPI:
+def create_app() -> FastAPIApp:
     if app is None:
         raise RuntimeError("FastAPI is not available")
     return app

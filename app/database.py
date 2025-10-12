@@ -4,7 +4,14 @@ from __future__ import annotations
 import logging
 import os
 from contextlib import contextmanager
-from typing import Any, Iterator
+from typing import TYPE_CHECKING, Any, Iterator
+
+if TYPE_CHECKING:  # pragma: no cover - import-time typing helpers
+    from sqlalchemy.orm import Session as _SessionType
+    from sqlalchemy.orm import sessionmaker as _SessionmakerType
+else:  # Fallback stubs so static analyzers keep the type information available
+    _SessionType = Any
+    _SessionmakerType = Any
 
 try:  # pragma: no cover - optional dependency
     from sqlalchemy import create_engine
@@ -28,7 +35,7 @@ else:
 
     from models.user import Base  # type: ignore
 
-    _session_factory: sessionmaker | None = None
+    _session_factory: _SessionmakerType | None = None
     _session_error: Exception | None = None
     _sync_engine: Any | None = None
 
@@ -103,7 +110,7 @@ else:
             _initialize_fallback(exc)
 
     @contextmanager
-    def session_scope() -> Session:
+    def session_scope() -> _SessionType:
         """Provide a transactional scope around a series of operations."""
 
         _ensure_session_factory()
@@ -111,7 +118,7 @@ else:
             raise RuntimeError(
                 "No database engine could be initialized. Install the required drivers or configure DATABASE_URL.",
             ) from _session_error
-        session: Session = _session_factory()
+        session: _SessionType = _session_factory()
         try:
             yield session
             session.commit()
@@ -122,7 +129,7 @@ else:
             session.close()
 
     @contextmanager
-    def get_session() -> Iterator[Session]:  # pragma: no cover - thin wrapper
+    def get_session() -> Iterator[_SessionType]:  # pragma: no cover - thin wrapper
         with session_scope() as session:
             yield session
 
