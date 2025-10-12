@@ -16,6 +16,11 @@ try:
 except ImportError:  # pragma: no cover - Python < 3.10
     from typing_extensions import TypeAlias  # type: ignore[assignment]
 
+try:
+    from typing import TypeAlias  # type: ignore[attr-defined]
+except ImportError:  # pragma: no cover - Python < 3.10
+    from typing_extensions import TypeAlias  # type: ignore[assignment]
+
 from .models import TranscriptionStatus
 
 try:  # pragma: no cover - optional dependency
@@ -73,9 +78,6 @@ except ImportError:  # pragma: no cover
 
         def dict(self) -> dict:  # pragma: no cover - helper for testing
             return {name: getattr(self, name) for name in getattr(self, "__annotations__", {})}
-
-        def model_dump(self) -> dict:  # pragma: no cover - compatibility helper
-            return self.dict()
 
         def model_dump(self) -> dict:  # pragma: no cover - compatibility helper
             return self.dict()

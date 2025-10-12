@@ -23,6 +23,7 @@ prometheus-fastapi-instrumentator = "^6.0.0"
 pydantic = "2.12.0"
 sse-starlette = "3.0.0"
 python-dotenv = "^1.0.1"
+typing-extensions = "^4.11.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.2.0"
