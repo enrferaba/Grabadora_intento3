@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.venv/
+venv/
+.env.local
+.env.*.local
+
+# Node
+frontend/node_modules/
+frontend/.vite/
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# Coverage / test artifacts
+.coverage
+htmlcov/
+pytest_cache/
+
+# Local data and runtime artifacts
+storage/
+transcripts/
+grabadora.db
+
+# Docker
+*.pid

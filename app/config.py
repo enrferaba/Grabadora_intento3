@@ -55,6 +55,7 @@ class Settings:
     rq_job_timeout: int = 1800
     rq_result_ttl: int = 86400
     rq_failure_ttl: int = 3600
+    queue_backend: Literal["auto", "redis", "memory"] = "auto"
 
     database_url: str = (
         "postgresql+psycopg2://postgres:postgres@db:5432/grabadora"
@@ -72,6 +73,7 @@ class Settings:
     transcripts_dir: str = "transcripts"
     audio_cache_dir: str = "audio-cache"
     models_cache_dir: str = "models"
+    frontend_origin: str | None = None
 
     max_upload_size_mb: int = 500
     live_window_seconds: float = 5.0

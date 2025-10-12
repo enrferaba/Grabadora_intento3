@@ -9,14 +9,15 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
-import argparse
-import importlib.util
+import os
 import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List
+
+MIN_PYTHON = (3, 11)
 
 
 @dataclass
@@ -61,6 +62,8 @@ CLI_REQUIREMENTS = {
     "npm": "Instala Node.js LTS desde https://nodejs.org/.",
 }
 
+FFMPEG_REMEDY = "Instala FFmpeg y asegúrate de que 'ffmpeg' esté en el PATH."
+
 
 def check_python_packages() -> List[CheckResult]:
     results: List[CheckResult] = []
@@ -74,6 +77,27 @@ def check_python_packages() -> List[CheckResult]:
             )
         )
     return results
+
+
+def check_python_runtime() -> CheckResult:
+    version = sys.version_info
+    interpreter = Path(sys.executable)
+    ok = version >= MIN_PYTHON
+    details: str | None = None
+    if not ok:
+        details = f"Se detectó Python {version.major}.{version.minor}.{version.micro}."
+    elif "WindowsApps" in interpreter.parts:
+        ok = False
+        details = f"El intérprete activo es {interpreter}."
+    remedy = (
+        "Activa el entorno virtual del proyecto con Python 3.11+ y desactiva los alias de la Microsoft Store."
+    )
+    return CheckResult(
+        name="Intérprete de Python compatible",
+        ok=ok,
+        remedy=remedy,
+        details=details,
+    )
 
 
 def check_cli_tools() -> List[CheckResult]:
@@ -97,6 +121,113 @@ def check_frontend_ready() -> CheckResult:
         remedy="Ejecuta 'npm install' dentro de la carpeta frontend/",
         details=None if ok else "No se encontró 'frontend/node_modules/'.",
     )
+
+
+def check_ffmpeg_available() -> CheckResult:
+    ok = shutil.which("ffmpeg") is not None
+    return CheckResult(
+        name="FFmpeg disponible",
+        ok=ok,
+        remedy=FFMPEG_REMEDY,
+        details=None if ok else "Añade el ejecutable 'ffmpeg' al PATH del sistema.",
+    )
+
+
+def check_frontend_build() -> CheckResult:
+    dist_dir = Path("frontend/dist")
+    index_file = dist_dir / "index.html"
+    ok = dist_dir.exists() and index_file.exists()
+    return CheckResult(
+        name="Build de frontend generado",
+        ok=ok,
+        remedy="Ejecuta 'npm run build' dentro de frontend/ para crear la carpeta dist/.",
+        details=None if ok else "No se encontró 'frontend/dist/index.html'.",
+    )
+
+
+def _load_settings():
+    try:
+        from app.config import get_settings  # type: ignore
+
+        return get_settings()
+    except Exception:
+        return None
+
+
+def check_redis_connection(url: str) -> CheckResult:
+    try:
+        from redis import Redis  # type: ignore
+    except ImportError:
+        return CheckResult(
+            name="Redis accesible",
+            ok=False,
+            remedy="Instala la dependencia 'redis' y asegúrate de que el servicio esté levantado.",
+            details="No se pudo importar la librería redis.",
+        )
+    try:
+        client = Redis.from_url(url)
+        client.ping()
+        return CheckResult(name="Redis accesible", ok=True, remedy="Redis responde al ping.")
+    except Exception as exc:  # pragma: no cover - depende del entorno
+        return CheckResult(
+            name="Redis accesible",
+            ok=False,
+            remedy="Arranca Redis o ajusta GRABADORA_REDIS_URL.",
+            details=str(exc),
+        )
+
+
+def check_database_connection(url: str) -> CheckResult:
+    try:
+        from sqlalchemy import create_engine  # type: ignore
+    except ImportError:
+        return CheckResult(
+            name="Base de datos disponible",
+            ok=False,
+            remedy="Instala SQLAlchemy para validar la conexión a la base de datos.",
+            details="No se pudo importar SQLAlchemy.",
+        )
+    engine = create_engine(url, future=True)
+    try:
+        with engine.connect():
+            pass
+        return CheckResult(name="Base de datos disponible", ok=True, remedy="Conexión establecida correctamente.")
+    except Exception as exc:  # pragma: no cover - depende del entorno
+        return CheckResult(
+            name="Base de datos disponible",
+            ok=False,
+            remedy="Arranca la base de datos o corrige la cadena DATABASE_URL.",
+            details=str(exc),
+        )
+
+
+def check_s3_connection(endpoint_url: str, access_key: str, secret_key: str, region: str) -> CheckResult:
+    try:
+        import boto3  # type: ignore
+    except ImportError:
+        return CheckResult(
+            name="S3/MinIO accesible",
+            ok=False,
+            remedy="Instala boto3 para verificar el almacenamiento.",
+            details="No se pudo importar boto3.",
+        )
+    try:
+        client = boto3.client(
+            "s3",
+            endpoint_url=endpoint_url,
+            region_name=region,
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+        )
+        client.list_buckets()
+        return CheckResult(name="S3/MinIO accesible", ok=True, remedy="El endpoint respondió correctamente.")
+    except Exception as exc:  # pragma: no cover - depende del entorno
+        return CheckResult(
+            name="S3/MinIO accesible",
+            ok=False,
+            remedy="Arranca MinIO o ajusta las credenciales de S3.",
+            details=str(exc),
+        )
 
 
 def _has_docker_compose() -> bool:
@@ -125,18 +256,50 @@ def install_missing_python(packages: Iterable[str]) -> None:
 
 
 def ensure_frontend_dependencies() -> None:
+    npm_path = shutil.which("npm")
+    if npm_path is None:
+        print("No se pudo ejecutar 'npm install' porque 'npm' no está disponible en PATH.")
+        print("Instala Node.js o añade 'npm' al PATH y vuelve a intentarlo.")
+        return
+
     print("Instalando dependencias de frontend (npm install)...")
-    subprocess.run(["npm", "install"], cwd=Path("frontend"), check=False)
+    subprocess.run([npm_path, "install"], cwd=Path("frontend"), check=False)
 
 
-def run_checks(install_missing: bool = False, fix_frontend: bool = False) -> int:
+def run_checks(install_missing: bool = False, fix_frontend: bool = False, *, mode: str = "auto") -> int:
     print("🔍 Comprobando entorno...")
     results: List[CheckResult] = []
+    results.append(check_python_runtime())
     python_results = check_python_packages()
     results.extend(python_results)
     results.extend(check_cli_tools())
     frontend_result = check_frontend_ready()
     results.append(frontend_result)
+    results.append(check_ffmpeg_available())
+    results.append(check_frontend_build())
+
+    settings = _load_settings()
+    normalized_mode = mode
+    if normalized_mode not in {"local", "stack"}:
+        requested = os.getenv("GRABADORA_QUEUE_BACKEND", "auto").lower()
+        if requested == "redis":
+            normalized_mode = "stack"
+        elif requested == "memory":
+            normalized_mode = "local"
+        else:
+            normalized_mode = "local"
+
+    if normalized_mode == "stack" and settings is not None:
+        results.append(check_redis_connection(settings.redis_url))
+        results.append(check_database_connection(settings.database_url))
+        results.append(
+            check_s3_connection(
+                settings.s3_endpoint_url,
+                settings.s3_access_key,
+                settings.s3_secret_key,
+                settings.s3_region_name,
+            )
+        )
 
     for item in results:
         print(item.render())
@@ -166,12 +329,22 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Ejecuta 'npm install' en frontend/ si faltan dependencias de la SPA.",
     )
+    parser.add_argument(
+        "--mode",
+        choices=["auto", "local", "stack"],
+        default="auto",
+        help="Determina si se deben comprobar servicios externos (stack) o solo dependencias locales.",
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
-    return run_checks(install_missing=args.install_missing, fix_frontend=args.fix_frontend)
+    return run_checks(
+        install_missing=args.install_missing,
+        fix_frontend=args.fix_frontend,
+        mode=args.mode,
+    )
 
 
 if __name__ == "__main__":  # pragma: no cover - ejecución directa
