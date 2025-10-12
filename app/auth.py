@@ -7,7 +7,7 @@ import hmac
 import json
 import secrets
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, List, Optional
 
 try:  # pragma: no cover - optional dependency
@@ -109,7 +109,9 @@ def get_password_hash(password: str) -> str:
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     settings = get_settings()
     to_encode = data.copy()
-    expire = datetime.now(UTC) + (expires_delta or timedelta(minutes=settings.jwt_expiration_minutes))
+    expire = datetime.now(timezone.utc) + (
+        expires_delta or timedelta(minutes=settings.jwt_expiration_minutes)
+    )
     to_encode.update({"exp": int(expire.timestamp())})
     return encode_jwt(to_encode, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
