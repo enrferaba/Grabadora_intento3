@@ -192,6 +192,10 @@ def _obtain_queue() -> tuple[object, bool]:
     """Return a queue instance and whether it uses the in-memory fallback."""
 
     global _fallback_queue
+    if getattr(settings, "queue_backend", "auto") == "memory":
+        if _fallback_queue is None:
+            _fallback_queue = InMemoryQueue(settings.rq_default_queue, connection=InMemoryRedis.from_url("memory://local"))
+        return _fallback_queue, True
     if RedisClient is None or RQQueue is None:  # dependencies missing entirely
         if _fallback_queue is None:
             _fallback_queue = InMemoryQueue(settings.rq_default_queue, connection=InMemoryRedis.from_url("memory://local"))
@@ -282,13 +286,20 @@ logger = structlog.get_logger(__name__)
 app: FastAPIApp | None = None  # type: ignore[misc]
 if FastAPI is not None:
     app = FastAPI(title=settings.api_title, version=settings.api_version, description=settings.api_description)
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    allow_origins: List[str] = []
+    frontend_origin = getattr(settings, "frontend_origin", None)
+    if frontend_origin:
+        allow_origins = ["*"] if frontend_origin == "*" else [frontend_origin]
+    elif getattr(settings, "queue_backend", "auto") == "memory":
+        allow_origins = ["*"]
+    if allow_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=allow_origins,
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
     Instrumentator(namespace=settings.prometheus_namespace).instrument(app).expose(app)
 
 API_ERRORS = Counter("api_errors_total", "Total API errors", namespace=settings.prometheus_namespace)
