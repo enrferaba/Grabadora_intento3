@@ -60,6 +60,7 @@ export interface StreamHandlers {
   onDelta?: (delta: { text: string; t0: number; t1: number }) => void;
   onCompleted?: (payload: Record<string, unknown>) => void;
   onError?: (error: Error) => void;
+  onHeartbeat?: (payload: { status?: string; progress?: number; segment?: number }) => void;
 }
 
 export interface UploadOptions {
@@ -162,7 +163,13 @@ export async function uploadTranscription(formData: FormData, options: UploadOpt
   });
 }
 
-function parseEventStream(chunk: string, handlers: StreamHandlers): void {
+interface StreamState {
+  completed: boolean;
+  failed: boolean;
+  lastEventTs: number;
+}
+
+function parseEventStream(chunk: string, handlers: StreamHandlers, state: StreamState): void {
   const events = chunk.split("\n\n");
   for (const event of events) {
     if (!event.trim()) continue;
@@ -178,19 +185,26 @@ function parseEventStream(chunk: string, handlers: StreamHandlers): void {
     }
     const payloadText = data.trim();
     if (!payloadText) continue;
+    const now = Date.now();
+    state.lastEventTs = now;
     try {
       const payload = JSON.parse(payloadText);
       if (eventType === "delta") {
         handlers.onDelta?.(payload);
       } else if (eventType === "completed") {
+        state.completed = true;
         handlers.onCompleted?.(payload);
       } else if (eventType === "error") {
+        state.failed = true;
         handlers.onError?.(new Error(payload.detail ?? payloadText));
+      } else if (eventType === "heartbeat") {
+        handlers.onHeartbeat?.(payload);
       }
     } catch (error) {
       if (eventType === "delta") {
         handlers.onDelta?.({ text: payloadText, t0: 0, t1: 0 });
       } else if (eventType === "error") {
+        state.failed = true;
         handlers.onError?.(error as Error);
       }
     }
@@ -198,9 +212,64 @@ function parseEventStream(chunk: string, handlers: StreamHandlers): void {
 }
 
 export function streamTranscription(jobId: string, handlers: StreamHandlers): () => void {
-  const controller = new AbortController();
-  const auth = getAuthState();
-  (async () => {
+  const state: StreamState = {
+    completed: false,
+    failed: false,
+    lastEventTs: Date.now(),
+  };
+
+  let stopped = false;
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  let heartbeatMonitor: ReturnType<typeof setInterval> | null = null;
+  let currentController: AbortController | null = null;
+  let reconnectAttempts = 0;
+  let lastError: Error | null = null;
+
+  const MAX_RECONNECT_ATTEMPTS = 5;
+  const HEARTBEAT_TIMEOUT_MS = 20000;
+
+  const cleanupTimer = () => {
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+    if (heartbeatMonitor) {
+      clearInterval(heartbeatMonitor);
+      heartbeatMonitor = null;
+    }
+  };
+
+  const scheduleReconnect = () => {
+    if (stopped || state.completed || state.failed) {
+      return;
+    }
+    if (reconnectTimer) {
+      return;
+    }
+    if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+      state.failed = true;
+      cleanupTimer();
+      handlers.onError?.(lastError ?? new Error("Se perdió la conexión del stream"));
+      return;
+    }
+    const delay = Math.min(1000 * 2 ** reconnectAttempts, 10000);
+    reconnectAttempts += 1;
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      if (!stopped && !state.completed && !state.failed) {
+        openStream();
+      }
+    }, delay);
+  };
+
+  const openStream = async () => {
+    if (stopped || state.completed || state.failed) {
+      return;
+    }
+    const controller = new AbortController();
+    currentController = controller;
+    const auth = getAuthState();
+    let streamError: Error | null = null;
     try {
       const response = await fetch(`${API_BASE}/transcribe/${jobId}`, {
         headers: auth?.token ? { Authorization: `Bearer ${auth.token}` } : undefined,
@@ -209,30 +278,66 @@ export function streamTranscription(jobId: string, handlers: StreamHandlers): ()
       if (!response.ok || !response.body) {
         throw new Error(`No se pudo abrir el stream (${response.status})`);
       }
+      reconnectAttempts = 0;
+      lastError = null;
+      state.lastEventTs = Date.now();
       const reader = response.body.getReader();
       const decoder = new TextDecoder("utf-8");
       let buffer = "";
-      while (true) {
+      while (!stopped && !state.completed && !state.failed) {
         const { value, done } = await reader.read();
-        if (done) break;
+        if (done) {
+          break;
+        }
         buffer += decoder.decode(value, { stream: true });
         const lastSeparator = buffer.lastIndexOf("\n\n");
         if (lastSeparator !== -1) {
           const chunk = buffer.slice(0, lastSeparator);
-          parseEventStream(chunk, handlers);
+          parseEventStream(chunk, handlers, state);
           buffer = buffer.slice(lastSeparator + 2);
         }
       }
-      if (buffer.trim()) {
-        parseEventStream(buffer, handlers);
+      if (buffer.trim() && !state.completed && !state.failed) {
+        parseEventStream(buffer, handlers, state);
       }
     } catch (error) {
-      if (!controller.signal.aborted) {
-        handlers.onError?.(error as Error);
+      if (controller.signal.aborted || stopped || state.completed || state.failed) {
+        return;
       }
+      streamError = error as Error;
+      lastError = streamError;
+    } finally {
+      if (stopped || state.completed || state.failed) {
+        cleanupTimer();
+        return;
+      }
+      scheduleReconnect();
     }
-  })();
-  return () => controller.abort();
+  };
+
+  openStream();
+
+  heartbeatMonitor = setInterval(() => {
+    if (stopped || state.completed || state.failed) {
+      cleanupTimer();
+      return;
+    }
+    const idleMs = Date.now() - state.lastEventTs;
+    if (idleMs > HEARTBEAT_TIMEOUT_MS) {
+      if (currentController && !currentController.signal.aborted) {
+        currentController.abort();
+      }
+      scheduleReconnect();
+    }
+  }, HEARTBEAT_TIMEOUT_MS / 2);
+
+  return () => {
+    stopped = true;
+    cleanupTimer();
+    if (currentController && !currentController.signal.aborted) {
+      currentController.abort();
+    }
+  };
 }
 
 export async function listTranscripts(params: { search?: string; status?: string } = {}): Promise<TranscriptSummary[]> {

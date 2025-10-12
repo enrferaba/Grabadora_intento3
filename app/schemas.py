@@ -9,14 +9,18 @@ from typing import Any, Dict, List, Optional
 from .models import TranscriptionStatus
 
 try:  # pragma: no cover - optional dependency
-    from pydantic import BaseModel, ConfigDict, EmailStr, Field
+    from pydantic import BaseModel, EmailStr, Field
+    try:  # pragma: no cover - optional dependency
+        from pydantic import ConfigDict  # type: ignore[attr-defined]
+    except ImportError:  # pragma: no cover - Pydantic v1
+        ConfigDict = dict  # type: ignore[type-arg]
     from pydantic import ValidationError
     from pydantic import __version__ as _pydantic_version
 
-    IS_PYDANTIC_V1 = _pydantic_version.startswith("1.")
-    ORMConfig = None
-    MODEL_CONFIG_FROM_ATTRIBUTES = ConfigDict(from_attributes=True)
-    if IS_PYDANTIC_V1:
+    _IS_PYDANTIC_V1 = _pydantic_version.startswith("1.")
+    _HAVE_PYDANTIC = True
+
+    if _IS_PYDANTIC_V1:
         BaseModel.model_dump = BaseModel.dict  # type: ignore[attr-defined]
 
         @classmethod
@@ -29,16 +33,19 @@ try:  # pragma: no cover - optional dependency
                 return cls.from_orm(obj)
 
         BaseModel.model_validate = _compat_model_validate  # type: ignore[attr-defined]
-        ORMConfig = type("Config", (), {"orm_mode": True})
-        MODEL_CONFIG_FROM_ATTRIBUTES = None
+
     try:  # pragma: no cover - optional dependency
         import email_validator  # type: ignore
     except ImportError:  # pragma: no cover
         EmailStr = str  # type: ignore
 except ImportError:  # pragma: no cover
     EmailStr = str  # type: ignore
-    IS_PYDANTIC_V1 = False
-    MODEL_CONFIG_FROM_ATTRIBUTES = None
+    _HAVE_PYDANTIC = False
+    _IS_PYDANTIC_V1 = False
+
+    class ConfigDict(dict):  # type: ignore[type-arg]
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
 
     def Field(*_, default=None, default_factory=None, **__):  # type: ignore
         if default_factory is not None:
@@ -47,15 +54,18 @@ except ImportError:  # pragma: no cover
 
     class BaseModel:  # type: ignore
         def __init__(self, **data):
-            for name, annotation in self.__annotations__.items():  # type: ignore[attr-defined]
+            for name in getattr(self, "__annotations__", {}):
                 default = getattr(self.__class__, name, None)
                 value = data.get(name, default)
                 if callable(value):
                     value = value()
                 setattr(self, name, value)
 
-        def dict(self):  # pragma: no cover - helper for testing
-            return {name: getattr(self, name) for name in self.__annotations__}  # type: ignore[attr-defined]
+        def dict(self) -> dict:  # pragma: no cover - helper for testing
+            return {name: getattr(self, name) for name in getattr(self, "__annotations__", {})}
+
+        def model_dump(self) -> dict:  # pragma: no cover - compatibility helper
+            return self.dict()
 
         def model_dump(self) -> dict:  # pragma: no cover - compatibility helper
             return self.dict()
@@ -63,7 +73,7 @@ except ImportError:  # pragma: no cover
         @classmethod
         def from_orm(cls, obj):  # pragma: no cover - minimal implementation
             data = {}
-            for name in cls.__annotations__:  # type: ignore[attr-defined]
+            for name in getattr(cls, "__annotations__", {}):
                 data[name] = getattr(obj, name, None)
             return cls(**data)
 
@@ -75,7 +85,19 @@ except ImportError:  # pragma: no cover
                 return cls(**obj)
             return cls.from_orm(obj)
 
-    ORMConfig = None
+
+def _enable_from_attributes(cls):
+    if not _HAVE_PYDANTIC:
+        return cls
+    if _IS_PYDANTIC_V1:
+        config = getattr(cls, "Config", type("Config", (), {}))
+        setattr(config, "orm_mode", True)
+        cls.Config = config  # type: ignore[attr-defined]
+    else:
+        existing = getattr(cls, "model_config", ConfigDict())
+        merged = {**dict(existing), "from_attributes": True}
+        cls.model_config = ConfigDict(**merged)
+    return cls
 
 
 class ProfileCreate(BaseModel):
@@ -83,18 +105,13 @@ class ProfileCreate(BaseModel):
     description: Optional[str] = None
 
 
+@_enable_from_attributes
 class ProfileRead(ProfileCreate):
     id: int
     created_at: datetime
 
-    if 'MODEL_CONFIG_FROM_ATTRIBUTES' in globals() and MODEL_CONFIG_FROM_ATTRIBUTES is not None:
-        model_config = MODEL_CONFIG_FROM_ATTRIBUTES
 
-    if 'IS_PYDANTIC_V1' in globals() and IS_PYDANTIC_V1:
-        class Config:  # type: ignore[too-many-ancestors]
-            orm_mode = True
-
-
+@_enable_from_attributes
 class UsageMeterRead(BaseModel):
     id: int
     month: str
@@ -102,32 +119,19 @@ class UsageMeterRead(BaseModel):
     transcription_cost: float
     updated_at: Optional[datetime]
 
-    if 'MODEL_CONFIG_FROM_ATTRIBUTES' in globals() and MODEL_CONFIG_FROM_ATTRIBUTES is not None:
-        model_config = MODEL_CONFIG_FROM_ATTRIBUTES
-
-    if 'IS_PYDANTIC_V1' in globals() and IS_PYDANTIC_V1:
-        class Config:  # type: ignore[too-many-ancestors]
-            orm_mode = True
-
 
 class UserCreate(BaseModel):
     email: EmailStr
     password: str
 
 
+@_enable_from_attributes
 class UserRead(BaseModel):
     id: int
     email: EmailStr
     is_active: bool
     created_at: datetime
     profiles: List[ProfileRead] = Field(default_factory=list)
-
-    if 'MODEL_CONFIG_FROM_ATTRIBUTES' in globals() and MODEL_CONFIG_FROM_ATTRIBUTES is not None:
-        model_config = MODEL_CONFIG_FROM_ATTRIBUTES
-
-    if 'IS_PYDANTIC_V1' in globals() and IS_PYDANTIC_V1:
-        class Config:  # type: ignore[too-many-ancestors]
-            orm_mode = True
 
     def __init__(self, **data):
         profiles = data.pop("profiles", None)
@@ -141,6 +145,7 @@ class TranscriptResponse(BaseModel):
     quality_profile: Optional[str] = None
 
 
+@_enable_from_attributes
 class DebugEvent(BaseModel):
     timestamp: str
     stage: str
@@ -148,14 +153,8 @@ class DebugEvent(BaseModel):
     message: str
     extra: Dict[str, Any] = Field(default_factory=dict)
 
-    if 'MODEL_CONFIG_FROM_ATTRIBUTES' in globals() and MODEL_CONFIG_FROM_ATTRIBUTES is not None:
-        model_config = MODEL_CONFIG_FROM_ATTRIBUTES
 
-    if 'IS_PYDANTIC_V1' in globals() and IS_PYDANTIC_V1:
-        class Config:  # type: ignore[too-many-ancestors]
-            orm_mode = True
-
-
+@_enable_from_attributes
 class TranscriptSummary(BaseModel):
     id: int
     job_id: Optional[str] = None
@@ -180,14 +179,8 @@ class TranscriptSummary(BaseModel):
     debug_events: List[DebugEvent] = Field(default_factory=list)
     tags: List[str] = Field(default_factory=list)
 
-    if 'MODEL_CONFIG_FROM_ATTRIBUTES' in globals() and MODEL_CONFIG_FROM_ATTRIBUTES is not None:
-        model_config = MODEL_CONFIG_FROM_ATTRIBUTES
 
-    if 'IS_PYDANTIC_V1' in globals() and IS_PYDANTIC_V1:
-        class Config:  # type: ignore[too-many-ancestors]
-            orm_mode = True
-
-
+@_enable_from_attributes
 class TranscriptDetail(TranscriptSummary):
     original_filename: Optional[str] = None
     stored_path: Optional[str] = None
@@ -199,13 +192,6 @@ class TranscriptDetail(TranscriptSummary):
     speakers: List[Dict[str, Any]] = Field(default_factory=list)
     segments: List[Dict[str, Any]] = Field(default_factory=list)
     profile_id: Optional[int] = None
-
-    if 'MODEL_CONFIG_FROM_ATTRIBUTES' in globals() and MODEL_CONFIG_FROM_ATTRIBUTES is not None:
-        model_config = MODEL_CONFIG_FROM_ATTRIBUTES
-
-    if 'IS_PYDANTIC_V1' in globals() and IS_PYDANTIC_V1:
-        class Config:  # type: ignore[too-many-ancestors]
-            orm_mode = True
 
 
 class TranscriptExportRequest(BaseModel):
@@ -307,6 +293,7 @@ class SearchResponse(BaseModel):
     total: int
 
 
+@_enable_from_attributes
 class PricingTierSchema(BaseModel):
     id: int
     slug: str
@@ -317,13 +304,6 @@ class PricingTierSchema(BaseModel):
     max_minutes: int
     perks: Optional[List[str]] = None
     is_active: bool = True
-
-    if 'MODEL_CONFIG_FROM_ATTRIBUTES' in globals() and MODEL_CONFIG_FROM_ATTRIBUTES is not None:
-        model_config = MODEL_CONFIG_FROM_ATTRIBUTES
-
-    if 'IS_PYDANTIC_V1' in globals() and IS_PYDANTIC_V1:
-        class Config:  # type: ignore[too-many-ancestors]
-            orm_mode = True
 
 
 class CheckoutRequest(BaseModel):

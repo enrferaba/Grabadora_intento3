@@ -2,6 +2,10 @@ import { useEffect, useState } from "react";
 import type { TranscriptDetail, TranscriptSummary } from "@/lib/api";
 import { downloadTranscript, exportTranscript, getTranscript, listTranscripts } from "@/lib/api";
 import { TranscriptCard } from "@/features/library/components/TranscriptCard";
+import { MessageBanner } from "@/components/MessageBanner";
+
+type TranscriptFormat = "txt" | "md" | "srt";
+type ExportDestination = "notion" | "trello" | "webhook";
 
 export function LibraryPage() {
   const [items, setItems] = useState<TranscriptSummary[]>([]);
@@ -10,6 +14,10 @@ export function LibraryPage() {
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [banner, setBanner] = useState<{ tone: "success" | "error"; message: string } | null>(null);
+  const [pending, setPending] = useState<{ id: number; action: "download" | "export" } | null>(null);
+  const [detailFormat, setDetailFormat] = useState<TranscriptFormat>("txt");
+  const [detailDestination, setDetailDestination] = useState<ExportDestination>("notion");
 
   async function loadTranscripts() {
     try {
@@ -26,12 +34,12 @@ export function LibraryPage() {
   }
 
   useEffect(() => {
-    loadTranscripts();
+    void loadTranscripts();
   }, []);
 
   useEffect(() => {
     const handle = setTimeout(() => {
-      loadTranscripts();
+      void loadTranscripts();
     }, 300);
     return () => clearTimeout(handle);
   }, [search, status]);
@@ -40,15 +48,41 @@ export function LibraryPage() {
     try {
       const data = await getTranscript(id);
       setDetail(data);
+      setDetailFormat("txt");
+      setDetailDestination("notion");
     } catch (err) {
       const message = err instanceof Error ? err.message : "No se pudo abrir la transcripción";
       setError(message);
     }
   }
 
-  async function handleExport(id: number, destination: "notion" | "trello") {
-    await exportTranscript(id, destination);
-    alert(`Transcripción enviada a ${destination}`);
+  async function handleDownload(id: number, format: TranscriptFormat) {
+    try {
+      setPending({ id, action: "download" });
+      await downloadTranscript(id, format);
+      setBanner({ tone: "success", message: `Descarga en formato ${format.toUpperCase()} preparada.` });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "No se pudo descargar la transcripción";
+      setBanner({ tone: "error", message });
+    } finally {
+      setPending((previous) => (previous?.id === id ? null : previous));
+    }
+  }
+
+  async function handleExport(id: number, destination: ExportDestination, format: TranscriptFormat) {
+    try {
+      setPending({ id, action: "export" });
+      await exportTranscript(id, destination, format);
+      setBanner({
+        tone: "success",
+        message: `Transcripción enviada a ${destination === "webhook" ? "tu webhook" : destination}.`,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "No se pudo exportar la transcripción";
+      setBanner({ tone: "error", message });
+    } finally {
+      setPending((previous) => (previous?.id === id ? null : previous));
+    }
   }
 
   return (
@@ -75,11 +109,20 @@ export function LibraryPage() {
               <option value="completed">Completado</option>
               <option value="error">Error</option>
             </select>
-            <button className="primary" type="button" onClick={loadTranscripts}>
+            <button className="primary" type="button" onClick={() => void loadTranscripts()}>
               Actualizar
             </button>
           </div>
-          {error && <div style={{ color: "#fca5a5" }}>{error}</div>}
+          {error && (
+            <MessageBanner tone="error" onClose={() => setError(null)}>
+              {error}
+            </MessageBanner>
+          )}
+          {banner && (
+            <MessageBanner tone={banner.tone} onClose={() => setBanner(null)}>
+              {banner.message}
+            </MessageBanner>
+          )}
         </div>
         <div style={{ display: "grid", gap: "1rem" }}>
           {loading && <p style={{ color: "#94a3b8" }}>Cargando...</p>}
@@ -89,7 +132,9 @@ export function LibraryPage() {
               key={item.id}
               transcript={item}
               onOpen={openDetail}
-              onExport={(id) => handleExport(id, "notion")}
+              onDownload={(id, format) => void handleDownload(id, format)}
+              onExport={(id, destination, format) => void handleExport(id, destination, format)}
+              pendingAction={pending?.id === item.id ? pending.action : null}
             />
           ))}
         </div>
@@ -109,24 +154,51 @@ export function LibraryPage() {
                 Idioma: {detail.language || "desconocido"} · Perfil: {detail.quality_profile || "n/a"}
               </p>
             </div>
-            <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-              <button className="primary" type="button" onClick={() => downloadTranscript(detail.id, "txt")}>TXT</button>
-              <button className="primary" type="button" onClick={() => downloadTranscript(detail.id, "md")}>Markdown</button>
-              <button className="primary" type="button" onClick={() => downloadTranscript(detail.id, "srt")}>SRT</button>
+            <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
+              <label style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+                Formato
+                <select value={detailFormat} onChange={(event) => setDetailFormat(event.target.value as TranscriptFormat)}>
+                  <option value="txt">TXT</option>
+                  <option value="md">Markdown</option>
+                  <option value="srt">SRT</option>
+                </select>
+              </label>
+              <label style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+                Destino
+                <select
+                  value={detailDestination}
+                  onChange={(event) => setDetailDestination(event.target.value as ExportDestination)}
+                >
+                  <option value="notion">Notion</option>
+                  <option value="trello">Trello</option>
+                  <option value="webhook">Webhook</option>
+                </select>
+              </label>
               <button
+                className="primary"
                 type="button"
-                onClick={() => handleExport(detail.id, "trello")}
-                style={{
-                  borderRadius: "999px",
-                  border: "1px solid rgba(148,163,184,0.35)",
-                  background: "transparent",
-                  color: "#cbd5f5",
-                  padding: "0.5rem 1.2rem",
-                  cursor: "pointer",
-                }}
+                disabled={pending?.id === detail.id && pending.action === "download"}
+                onClick={() => void handleDownload(detail.id, detailFormat)}
               >
-                Enviar a Trello
+                {pending?.id === detail.id && pending.action === "download" ? "Preparando…" : "Descargar"}
               </button>
+              <button
+                className="secondary"
+                type="button"
+                disabled={pending?.id === detail.id && pending.action === "export"}
+                onClick={() => void handleExport(detail.id, detailDestination, detailFormat)}
+              >
+                {pending?.id === detail.id && pending.action === "export" ? "Enviando…" : "Exportar"}
+              </button>
+              {detail.transcript_url && (
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => window.open(detail.transcript_url as string, "_blank", "noopener")}
+                >
+                  Abrir enlace seguro
+                </button>
+              )}
             </div>
             <div
               style={{

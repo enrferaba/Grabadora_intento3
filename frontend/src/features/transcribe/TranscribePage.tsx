@@ -1,16 +1,20 @@
-import { useEffect, useRef, useState } from "react";
-import { qualityProfiles, streamTranscription, uploadTranscription } from "@/lib/api";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { downloadTranscript, qualityProfiles, streamTranscription, uploadTranscription } from "@/lib/api";
 import { SseViewer } from "@/features/transcribe/components/SseViewer";
-import { Uploader } from "@/features/transcribe/components/Uploader";
 import { TranscriptionHistory } from "@/features/transcribe/components/TranscriptionHistory";
+import { MessageBanner } from "@/components/MessageBanner";
+import { Uploader, type UploaderHandle } from "@/features/transcribe/components/Uploader";
 
 interface Props {
   onLibraryRefresh?: () => void;
 }
 
 type FlowStatus = "idle" | "uploading" | "streaming" | "completed" | "error" | "recording";
+type TranscriptFormat = "txt" | "md" | "srt";
 
 export function TranscribePage({ onLibraryRefresh }: Props) {
+  const navigate = useNavigate();
   const [language, setLanguage] = useState("auto");
   const [profile, setProfile] = useState("balanced");
   const [tags, setTags] = useState("reunión, minutos");
@@ -23,17 +27,31 @@ export function TranscribePage({ onLibraryRefresh }: Props) {
   const [completedPayload, setCompletedPayload] = useState<Record<string, unknown> | null>(null);
   const [diarization, setDiarization] = useState(false);
   const [wordTimestamps, setWordTimestamps] = useState(true);
+  const [heartbeatMeta, setHeartbeatMeta] = useState<{ status?: string; progress?: number; segment?: number } | null>(null);
   const stopStreamRef = useRef<() => void>();
   const [viewerFontSize, setViewerFontSize] = useState(1.1);
   const [viewerFullscreen, setViewerFullscreen] = useState(false);
   const [historyRefreshToken, setHistoryRefreshToken] = useState(0);
+  const uploaderRef = useRef<UploaderHandle | null>(null);
+  const [actionBanner, setActionBanner] = useState<{ tone: "success" | "error" | "info"; message: string } | null>(null);
+  const [downloadFormat, setDownloadFormat] = useState<TranscriptFormat>("txt");
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => () => stopStreamRef.current?.(), []);
+  useEffect(() => {
+    if (!actionBanner || actionBanner.tone === "error") {
+      return;
+    }
+    const timer = window.setTimeout(() => setActionBanner(null), 6000);
+    return () => window.clearTimeout(timer);
+  }, [actionBanner]);
 
   async function startStream(job: { job_id: string }) {
     setJobId(job.job_id);
     setStatus("streaming");
+    setHeartbeatMeta(null);
     stopStreamRef.current?.();
+    setActionBanner(null);
     stopStreamRef.current = streamTranscription(job.job_id, {
       onDelta(delta) {
         setTokens((previous) => [...previous, delta]);
@@ -43,10 +61,15 @@ export function TranscribePage({ onLibraryRefresh }: Props) {
         setCompletedPayload(payload);
         onLibraryRefresh?.();
         setHistoryRefreshToken((value) => value + 1);
+        setActionBanner({ tone: "success", message: "Transcripción completada. Puedes descargarla o revisarla en tu biblioteca." });
       },
       onError(err) {
         setError(err.message);
         setStatus("error");
+        setActionBanner({ tone: "error", message: err.message });
+      },
+      onHeartbeat(payload) {
+        setHeartbeatMeta(payload);
       },
     });
   }
@@ -55,6 +78,7 @@ export function TranscribePage({ onLibraryRefresh }: Props) {
     setTokens([]);
     setError(null);
     setStatus("uploading");
+    setActionBanner({ tone: "info", message: "Subiendo tu archivo. Comenzaremos a transcribir en cuanto finalice." });
     const formData = new FormData();
     formData.append("file", file);
     if (language !== "auto") {
@@ -75,6 +99,7 @@ export function TranscribePage({ onLibraryRefresh }: Props) {
       const message = err instanceof Error ? err.message : "No se pudo iniciar la transcripción";
       setError(message);
       setStatus("error");
+      setActionBanner({ tone: "error", message });
     }
   }
 
@@ -85,7 +110,11 @@ export function TranscribePage({ onLibraryRefresh }: Props) {
     setError(null);
     setJobId(null);
     setCompletedPayload(null);
+    setHeartbeatMeta(null);
     setViewerFullscreen(false);
+    setUploadProgress(0);
+    setActionBanner(null);
+    setDownloading(false);
   }
 
   const statusPalette: Record<FlowStatus, string> = {
@@ -97,8 +126,111 @@ export function TranscribePage({ onLibraryRefresh }: Props) {
     recording: "rgba(244, 114, 182, 0.85)",
   };
 
+  const isBusy = status === "uploading" || status === "streaming" || status === "recording";
+  const completedId = typeof completedPayload?.id === "number" ? (completedPayload.id as number) : null;
+  const transcriptUrl = typeof completedPayload?.transcript_url === "string" ? (completedPayload.transcript_url as string) : null;
+  const detailTitle = (completedPayload?.title as string | undefined) ?? undefined;
+
+  const availableLanguages = useMemo(
+    () => [
+      { value: "auto", label: "Automático" },
+      { value: "es", label: "Español" },
+      { value: "en", label: "Inglés" },
+      { value: "fr", label: "Francés" },
+      { value: "de", label: "Alemán" },
+      { value: "pt", label: "Portugués" },
+    ],
+    [],
+  );
+
+  async function handleQuickDownload(format: TranscriptFormat) {
+    if (!completedId) {
+      setActionBanner({ tone: "error", message: "Descarga no disponible. Revisa tu biblioteca para más detalles." });
+      return;
+    }
+    setDownloading(true);
+    try {
+      await downloadTranscript(completedId, format);
+      setActionBanner({
+        tone: "success",
+        message: `La descarga en formato ${format.toUpperCase()} ha comenzado${detailTitle ? ` para "${detailTitle}"` : ""}.`,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "No se pudo descargar la transcripción";
+      setActionBanner({ tone: "error", message });
+    } finally {
+      setDownloading(false);
+    }
+  }
+
+  function handleOpenLibrary() {
+    navigate("/biblioteca");
+  }
+
+  function handleStartRecording() {
+    navigate("/grabar");
+  }
+
+  function handleOpenTranscriptUrl() {
+    if (!transcriptUrl) {
+      setActionBanner({ tone: "error", message: "Todavía no hay un enlace público para esta transcripción." });
+      return;
+    }
+    window.open(transcriptUrl, "_blank", "noopener");
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "2.5rem", width: "100%" }}>
+      <section className="card" style={{ display: "flex", flexDirection: "column", gap: "1.25rem", padding: "2rem" }}>
+        <header style={{ display: "flex", flexDirection: "column", gap: "0.65rem" }}>
+          <h1 style={{ margin: 0, fontSize: "1.85rem" }}>Transcribe sin fricción</h1>
+          <p style={{ margin: 0, color: "#94a3b8", maxWidth: "60ch" }}>
+            Sube un archivo, grábalo en directo o revisa tu biblioteca. Todos los botones se mantienen activos solo cuando la acción está disponible, para que siempre tengas claro el siguiente paso.
+          </p>
+        </header>
+        {(actionBanner || error) && (
+          <div style={{ display: "grid", gap: "0.75rem" }}>
+            {error && (
+              <MessageBanner tone="error" onClose={() => setError(null)}>
+                {error}
+              </MessageBanner>
+            )}
+            {actionBanner && (
+              <MessageBanner tone={actionBanner.tone} onClose={() => setActionBanner(null)}>
+                {actionBanner.message}
+              </MessageBanner>
+            )}
+          </div>
+        )}
+        <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+          <button
+            className="primary"
+            type="button"
+            onClick={() => uploaderRef.current?.open()}
+            disabled={isBusy}
+          >
+            {isBusy ? "Procesando audio…" : "Seleccionar archivo"}
+          </button>
+          <button className="secondary" type="button" onClick={handleStartRecording}>
+            Grabar desde el navegador
+          </button>
+          <button
+            type="button"
+            onClick={handleOpenLibrary}
+            style={{
+              borderRadius: "999px",
+              border: "1px solid rgba(148,163,184,0.35)",
+              background: "transparent",
+              color: "#cbd5f5",
+              padding: "0.65rem 1.4rem",
+              cursor: "pointer",
+            }}
+          >
+            Abrir biblioteca
+          </button>
+        </div>
+      </section>
+
       <section
         style={{
           display: "grid",
@@ -133,25 +265,36 @@ export function TranscribePage({ onLibraryRefresh }: Props) {
               >
                 {status === "idle" && "Listo"}
                 {status === "uploading" && `Subiendo ${uploadProgress}%`}
-                {status === "streaming" && "Transcribiendo"}
+                {status === "streaming" && (
+                  <>
+                    Transcribiendo
+                    {typeof heartbeatMeta?.progress === "number" && heartbeatMeta.progress > 0 && (
+                      <span style={{ fontWeight: 500, marginLeft: "0.35rem", fontSize: "0.75rem" }}>
+                        · {heartbeatMeta.progress} tokens
+                      </span>
+                    )}
+                  </>
+                )}
                 {status === "completed" && "Completado"}
                 {status === "error" && "Error"}
               </span>
             </div>
-            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
               {qualityProfiles().map((item) => (
                 <button
                   key={item.id}
                   type="button"
                   onClick={() => setProfile(item.id)}
+                  disabled={isBusy}
                   style={{
                     borderRadius: "999px",
                     padding: "0.35rem 0.95rem",
                     border: profile === item.id ? "1px solid #38bdf8" : "1px solid rgba(148,163,184,0.35)",
                     background: profile === item.id ? "rgba(56,189,248,0.18)" : "rgba(15,23,42,0.55)",
-                    color: "#e2e8f0",
-                    cursor: "pointer",
+                    color: isBusy ? "rgba(148,163,184,0.75)" : "#e2e8f0",
+                    cursor: isBusy ? "not-allowed" : "pointer",
                     transition: "all 0.2s ease",
+                    opacity: isBusy && profile !== item.id ? 0.6 : 1,
                   }}
                 >
                   <strong style={{ display: "block", fontSize: "0.85rem" }}>{item.title}</strong>
@@ -161,36 +304,56 @@ export function TranscribePage({ onLibraryRefresh }: Props) {
             </div>
           </header>
 
-          <Uploader onSelect={handleSubmit} busy={status === "uploading" || status === "streaming"} />
+          <Uploader ref={uploaderRef} onSelect={handleSubmit} busy={isBusy} />
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1rem" }}>
             <label style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
               Idioma
-              <select value={language} onChange={(event) => setLanguage(event.target.value)}>
-                <option value="auto">Automático</option>
-                <option value="es">Español</option>
-                <option value="en">Inglés</option>
-                <option value="fr">Francés</option>
-                <option value="de">Alemán</option>
+              <select value={language} onChange={(event) => setLanguage(event.target.value)} disabled={isBusy}>
+                {availableLanguages.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {item.label}
+                  </option>
+                ))}
               </select>
             </label>
             <label style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
               Título (opcional)
-              <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Reunión semanal" />
+              <input
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                placeholder="Reunión semanal"
+                disabled={isBusy}
+              />
             </label>
             <label style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
               Etiquetas (opcional)
-              <input value={tags} onChange={(event) => setTags(event.target.value)} placeholder="reunión, sprint, tareas" />
+              <input
+                value={tags}
+                onChange={(event) => setTags(event.target.value)}
+                placeholder="reunión, sprint, tareas"
+                disabled={isBusy}
+              />
             </label>
           </div>
 
           <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap" }}>
             <label style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              <input type="checkbox" checked={diarization} onChange={(event) => setDiarization(event.target.checked)} />
+              <input
+                type="checkbox"
+                checked={diarization}
+                onChange={(event) => setDiarization(event.target.checked)}
+                disabled={isBusy}
+              />
               Diarización experimental
             </label>
             <label style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              <input type="checkbox" checked={wordTimestamps} onChange={(event) => setWordTimestamps(event.target.checked)} />
+              <input
+                type="checkbox"
+                checked={wordTimestamps}
+                onChange={(event) => setWordTimestamps(event.target.checked)}
+                disabled={isBusy}
+              />
               Marcas temporales por palabra
             </label>
           </div>
@@ -223,26 +386,59 @@ export function TranscribePage({ onLibraryRefresh }: Props) {
           )}
 
           {(status === "completed" || status === "error") && (
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
               <div style={{ color: status === "completed" ? "#22c55e" : "#fca5a5" }}>
                 {status === "completed"
-                  ? "Transcripción completada. Revisa tu historial para descargarla."
+                  ? "Transcripción completada. Revisa y comparte el resultado con las acciones rápidas."
                   : error ?? "No se pudo completar la transcripción."}
               </div>
-              <button
-                type="button"
-                onClick={resetFlow}
-                style={{
-                  borderRadius: "999px",
-                  border: "1px solid rgba(148,163,184,0.35)",
-                  background: "transparent",
-                  color: "#cbd5f5",
-                  padding: "0.55rem 1.4rem",
-                  cursor: "pointer",
-                }}
-              >
-                Nuevo audio
-              </button>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem", alignItems: "center" }}>
+                {status === "completed" && (
+                  <>
+                    <label style={{ display: "flex", flexDirection: "column", gap: "0.35rem", color: "#cbd5f5" }}>
+                      Formato
+                      <select value={downloadFormat} onChange={(event) => setDownloadFormat(event.target.value as TranscriptFormat)}>
+                        <option value="txt">TXT</option>
+                        <option value="md">Markdown</option>
+                        <option value="srt">Subtítulos SRT</option>
+                      </select>
+                    </label>
+                    <button
+                      className="primary"
+                      type="button"
+                      disabled={downloading}
+                      onClick={() => void handleQuickDownload(downloadFormat)}
+                    >
+                      {downloading ? "Preparando descarga…" : `Descargar ${downloadFormat.toUpperCase()}`}
+                    </button>
+                    <button
+                      className="secondary"
+                      type="button"
+                      onClick={handleOpenTranscriptUrl}
+                      disabled={!transcriptUrl}
+                    >
+                      Abrir enlace seguro
+                    </button>
+                    <button className="secondary" type="button" onClick={handleOpenLibrary}>
+                      Ver en biblioteca
+                    </button>
+                  </>
+                )}
+                <button
+                  type="button"
+                  onClick={resetFlow}
+                  style={{
+                    borderRadius: "999px",
+                    border: "1px solid rgba(148,163,184,0.35)",
+                    background: "transparent",
+                    color: "#cbd5f5",
+                    padding: "0.55rem 1.4rem",
+                    cursor: "pointer",
+                  }}
+                >
+                  Nuevo audio
+                </button>
+              </div>
             </div>
           )}
         </div>

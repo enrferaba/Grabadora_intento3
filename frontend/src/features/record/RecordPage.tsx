@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { qualityProfiles, streamTranscription, uploadTranscription } from "@/lib/api";
 import { AuthPanel } from "@/features/account/components/AuthPanel";
 import { SseViewer } from "@/features/transcribe/components/SseViewer";
+import { MessageBanner } from "@/components/MessageBanner";
 
 interface Props {
   onLibraryRefresh?: () => void;
@@ -25,12 +26,19 @@ export function RecordPage({ onLibraryRefresh }: Props) {
   const [viewerFontSize, setViewerFontSize] = useState(1.1);
   const [viewerFullscreen, setViewerFullscreen] = useState(false);
   const stopStreamRef = useRef<() => void>();
+  const [banner, setBanner] = useState<{ tone: "info" | "success" | "error"; message: string } | null>(null);
 
   useEffect(() => () => {
     stopStreamRef.current?.();
     cancelAnimationFrame(animationRef.current ?? 0);
     audioContextRef.current?.close();
   }, []);
+
+  useEffect(() => {
+    if (!banner || banner.tone === "error") return;
+    const timer = window.setTimeout(() => setBanner(null), 5000);
+    return () => window.clearTimeout(timer);
+  }, [banner]);
 
   function updateMeter() {
     const analyser = analyserRef.current;
@@ -76,9 +84,11 @@ export function RecordPage({ onLibraryRefresh }: Props) {
       setStatus("recording");
       setError(null);
       setViewerFullscreen(false);
+      setBanner({ tone: "info", message: "Grabando… pulsa detener para enviar la transcripción automáticamente." });
     } catch (err) {
       const message = err instanceof Error ? err.message : "No se pudo acceder al micrófono";
       setError(message);
+      setBanner({ tone: "error", message });
     }
   }
 
@@ -86,6 +96,7 @@ export function RecordPage({ onLibraryRefresh }: Props) {
     mediaRecorderRef.current?.stop();
     mediaRecorderRef.current = null;
     setRecording(false);
+    setBanner({ tone: "info", message: "Procesando tu grabación…" });
   }
 
   async function startStream(job: { job_id: string }) {
@@ -117,11 +128,13 @@ export function RecordPage({ onLibraryRefresh }: Props) {
     formData.append("title", title || "Grabación rápida");
     try {
       const job = await uploadTranscription(formData);
+      setBanner({ tone: "success", message: "Grabación enviada. Seguimos transcribiendo en vivo." });
       await startStream(job);
     } catch (err) {
       const message = err instanceof Error ? err.message : "No se pudo enviar la grabación";
       setError(message);
       setStatus("error");
+      setBanner({ tone: "error", message });
     }
   }
 
@@ -135,6 +148,11 @@ export function RecordPage({ onLibraryRefresh }: Props) {
               Controla el micro, visualiza niveles y envía la transcripción sin salir de la página.
             </p>
           </header>
+          {banner && (
+            <MessageBanner tone={banner.tone} onClose={() => setBanner(null)}>
+              {banner.message}
+            </MessageBanner>
+          )}
           <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap" }}>
             <label style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
               Idioma

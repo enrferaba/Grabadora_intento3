@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { downloadTranscript, listTranscripts, type TranscriptSummary } from "@/lib/api";
+import { MessageBanner } from "@/components/MessageBanner";
 
 interface Props {
   refreshKey?: number;
@@ -12,6 +13,8 @@ const statusColors: Record<string, string> = {
   completed: "rgba(34,197,94,0.65)",
   error: "rgba(239,68,68,0.65)",
 };
+
+type TranscriptFormat = "txt" | "md" | "srt";
 
 function formatDate(value: string | null | undefined): string {
   if (!value) return "–";
@@ -26,6 +29,9 @@ export function TranscriptionHistory({ refreshKey = 0, onSelect }: Props) {
   const [items, setItems] = useState<TranscriptSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [banner, setBanner] = useState<{ tone: "success" | "error"; message: string } | null>(null);
+  const [downloadingId, setDownloadingId] = useState<number | null>(null);
+  const [formatSelection, setFormatSelection] = useState<Record<number, TranscriptFormat>>({});
 
   useEffect(() => {
     let active = true;
@@ -54,6 +60,25 @@ export function TranscriptionHistory({ refreshKey = 0, onSelect }: Props) {
 
   const emptyState = useMemo(() => !loading && items.length === 0, [items.length, loading]);
 
+  useEffect(() => {
+    if (!banner) return;
+    const timer = window.setTimeout(() => setBanner(null), 4000);
+    return () => window.clearTimeout(timer);
+  }, [banner]);
+
+  async function handleDownload(id: number, format: TranscriptFormat) {
+    try {
+      setDownloadingId(id);
+      await downloadTranscript(id, format);
+      setBanner({ tone: "success", message: `Descarga en formato ${format.toUpperCase()} preparada.` });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "No se pudo descargar la transcripción";
+      setBanner({ tone: "error", message });
+    } finally {
+      setDownloadingId(null);
+    }
+  }
+
   return (
     <section
       className="card"
@@ -69,7 +94,16 @@ export function TranscriptionHistory({ refreshKey = 0, onSelect }: Props) {
         {loading && <span style={{ color: "#38bdf8" }}>Actualizando…</span>}
       </header>
 
-      {error && <div style={{ color: "#fca5a5" }}>{error}</div>}
+      {error && (
+        <MessageBanner tone="error" onClose={() => setError(null)}>
+          {error}
+        </MessageBanner>
+      )}
+      {banner && (
+        <MessageBanner tone={banner.tone} onClose={() => setBanner(null)}>
+          {banner.message}
+        </MessageBanner>
+      )}
 
       {emptyState ? (
         <div
@@ -145,14 +179,28 @@ export function TranscriptionHistory({ refreshKey = 0, onSelect }: Props) {
                         >
                           Ver
                         </button>
+                        <select
+                          value={formatSelection[item.id] ?? "txt"}
+                          onChange={(event) =>
+                            setFormatSelection((prev) => ({ ...prev, [item.id]: event.target.value as TranscriptFormat }))
+                          }
+                          style={{ minWidth: "120px" }}
+                          disabled={item.status !== "completed"}
+                        >
+                          <option value="txt">TXT</option>
+                          <option value="md">Markdown</option>
+                          <option value="srt">SRT</option>
+                        </select>
                         <button
                           className="primary"
                           type="button"
-                          disabled={item.status !== "completed"}
-                          onClick={() => downloadTranscript(item.id, "txt")}
+                          disabled={item.status !== "completed" || downloadingId === item.id}
+                          onClick={() =>
+                            void handleDownload(item.id, (formatSelection[item.id] ?? "txt") as TranscriptFormat)
+                          }
                           style={{ padding: "0.35rem 0.75rem" }}
                         >
-                          Descargar TXT
+                          {downloadingId === item.id ? "Preparando…" : "Descargar"}
                         </button>
                       </div>
                     </td>
