@@ -119,3 +119,11 @@ docker compose up --build
 ```
 
 Consulta `ejecutar.md` para una versión abreviada (un único comando) y sugerencias de despliegue.
+
+## Problemas comunes
+
+- **ImportError: cannot import name 'Queue' from 'queue'**: en Windows puede quedar
+  una carpeta llamada `queue/` dentro del proyecto (procedente de repositorios
+  anteriores). Ese directorio colisiona con la librería estándar. El paquete
+  `app` ya fuerza la carga del módulo oficial, pero si sigues viendo el error
+  elimina o renombra esa carpeta antes de ejecutar `python ejecutar.py`.
