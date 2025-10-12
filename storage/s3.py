@@ -9,11 +9,14 @@ from typing import BinaryIO, Dict, List, Optional
 
 try:  # pragma: no cover - optional dependency
     import boto3
-    from botocore.exceptions import ClientError
+    from botocore.exceptions import ClientError, EndpointConnectionError
 except ImportError:  # pragma: no cover - optional dependency
     boto3 = None  # type: ignore
 
     class ClientError(Exception):
+        pass
+
+    class EndpointConnectionError(Exception):
         pass
 
 from app.config import get_settings
@@ -30,6 +33,8 @@ class S3StorageClient:
         settings = get_settings()
         self.audio_bucket = settings.s3_bucket_audio
         self.transcripts_bucket = settings.s3_bucket_transcripts
+        self._endpoint_url = settings.s3_endpoint_url
+        self._presigned_ttl = settings.s3_presigned_ttl
         if boto3 is None:  # pragma: no cover - dependency not installed
             self._client = None
         else:
@@ -45,6 +50,18 @@ class S3StorageClient:
         bucket_store = self._memory_buckets.setdefault(bucket, {})
         return bucket_store
 
+    def _fallback_to_memory(self, error: Optional[Exception] = None) -> None:
+        if self._client is None:
+            return
+        endpoint_url = getattr(getattr(self._client, "meta", None), "endpoint_url", self._endpoint_url)
+        logger.warning(
+            "Falling back to in-memory storage because the S3 endpoint is unreachable.",
+            extra={"endpoint": endpoint_url, "error": repr(error) if error else None},
+        )
+        self._client = None
+        self._ensure_memory_bucket(self.audio_bucket)
+        self._ensure_memory_bucket(self.transcripts_bucket)
+
     def ensure_buckets(self) -> None:
         if self._client is None:
             self._ensure_memory_bucket(self.audio_bucket)
@@ -55,7 +72,14 @@ class S3StorageClient:
                 self._client.head_bucket(Bucket=bucket)
             except ClientError:
                 logger.info("Creating bucket", extra={"bucket": bucket})
-                self._client.create_bucket(Bucket=bucket)
+                try:
+                    self._client.create_bucket(Bucket=bucket)
+                except EndpointConnectionError as exc:  # pragma: no cover - network failure
+                    self._fallback_to_memory(exc)
+                    return
+            except EndpointConnectionError as exc:  # pragma: no cover - network failure
+                self._fallback_to_memory(exc)
+                return
 
     def upload_audio(self, fileobj: BinaryIO, object_name: str) -> str:
         if self._client is None:
@@ -129,17 +153,18 @@ class S3StorageClient:
                 })
         return items
 
-    def create_presigned_url(self, object_name: str, expires_in: int = 3600) -> Optional[str]:
+    def create_presigned_url(self, object_name: str, expires_in: Optional[int] = None) -> Optional[str]:
+        ttl = expires_in or self._presigned_ttl
         if self._client is None:
             store = self._ensure_memory_bucket(self.transcripts_bucket)
             if object_name not in store:
                 return None
-            return f"memory://{self.transcripts_bucket}/{object_name}"
+            return f"memory://{self.transcripts_bucket}/{object_name}?ttl={ttl}"
         try:
             return self._client.generate_presigned_url(
                 "get_object",
                 Params={"Bucket": self.transcripts_bucket, "Key": object_name},
-                ExpiresIn=expires_in,
+                ExpiresIn=ttl,
             )
         except ClientError:
             logger.exception("Unable to generate presigned URL", extra={"key": object_name})

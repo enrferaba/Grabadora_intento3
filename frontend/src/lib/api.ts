@@ -28,6 +28,17 @@ export interface TranscriptSummary {
   updated_at: string;
   completed_at?: string | null;
   duration_seconds?: number | null;
+  runtime_seconds?: number | null;
+  model_size?: string | null;
+  device_preference?: string | null;
+  beam_size?: number | null;
+  subject?: string | null;
+  output_folder?: string | null;
+  premium_enabled?: boolean | null;
+  premium_notes?: string | null;
+  premium_perks?: string[] | null;
+  error_message?: string | null;
+  debug_events?: Array<Record<string, unknown>>;
   tags: string[];
 }
 
@@ -36,6 +47,11 @@ export interface TranscriptDetail extends TranscriptSummary {
   transcript_key?: string | null;
   transcript_url?: string | null;
   segments: Array<{ start: number; end: number; text: string }>;
+  stored_path?: string | null;
+  transcript_path?: string | null;
+  text?: string | null;
+  speakers?: Array<Record<string, unknown>>;
+  original_filename?: string | null;
   error_message?: string | null;
   profile_id?: number | null;
 }

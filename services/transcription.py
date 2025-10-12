@@ -92,7 +92,7 @@ class TranscriptionService:
         segments = list(segments_iterable)
 
         transcript_tokens: list[str] = []
-        for segment in segments:
+        for segment_index, segment in enumerate(segments):
             start = float(getattr(segment, "start", 0.0) or 0.0)
             end = float(getattr(segment, "end", start) or start)
             for token in getattr(segment, "tokens", []) or []:
@@ -101,7 +101,7 @@ class TranscriptionService:
                     continue
                 transcript_tokens.append(text)
                 if token_callback:
-                    payload = {"text": text, "t0": start, "t1": end}
+                    payload = {"text": text, "t0": start, "t1": end, "segment": segment_index}
                     try:
                         token_callback(payload)
                     except Exception:  # pragma: no cover - defensive logging
@@ -149,7 +149,7 @@ class TranscriptionService:
             token_text = f"{word}{suffix}"
             pieces.append(token_text)
             if token_callback:
-                payload = {"text": token_text, "t0": index * 0.6, "t1": (index + 1) * 0.6}
+                payload = {"text": token_text, "t0": index * 0.6, "t1": (index + 1) * 0.6, "segment": index}
                 try:
                     token_callback(payload)
                 except Exception:  # pragma: no cover - defensive

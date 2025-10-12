@@ -26,8 +26,8 @@ class DummyTranscriber:
 
     def transcribe(self, path, token_callback=None, language=None):
         if token_callback:
-            token_callback({"text": "Hello", "t0": 0.0, "t1": 1.0})
-            token_callback({"text": " ", "t0": 1.0, "t1": 2.0})
+            token_callback({"text": "Hello", "t0": 0.0, "t1": 1.0, "segment": 0})
+            token_callback({"text": " ", "t0": 1.0, "t1": 2.0, "segment": 1})
         return {
             "text": "Hello world",
             "segments": [
@@ -99,4 +99,9 @@ def test_transcribe_job_updates_meta_and_returns_payload(patch_dependencies):
 
     assert result["text"] == "Hello world"
     assert patch_dependencies.meta["status"] == "completed"
-    assert json.loads(patch_dependencies.meta["last_token"]) == {"text": " ", "t0": 1.0, "t1": 2.0}
+    assert json.loads(patch_dependencies.meta["last_token"]) == {
+        "text": " ",
+        "t0": 1.0,
+        "t1": 2.0,
+        "segment": 1,
+    }

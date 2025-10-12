@@ -1,6 +1,9 @@
 from pathlib import Path
 from types import SimpleNamespace
 
+from pathlib import Path
+from types import SimpleNamespace
+
 import pytest
 
 from services.transcription import TranscriptionService
@@ -37,9 +40,9 @@ def test_transcription_streams_delta_tokens(monkeypatch):
 
     assert "Hi!" == result["text"]
     assert tokens == [
-        {"text": "H", "t0": 0.0, "t1": 0.5},
-        {"text": "i", "t0": 0.0, "t1": 0.5},
-        {"text": "!", "t0": 0.5, "t1": 0.75},
+        {"text": "H", "t0": 0.0, "t1": 0.5, "segment": 0},
+        {"text": "i", "t0": 0.0, "t1": 0.5, "segment": 0},
+        {"text": "!", "t0": 0.5, "t1": 0.75, "segment": 1},
     ]
 
 

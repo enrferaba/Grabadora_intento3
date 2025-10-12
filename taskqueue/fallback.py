@@ -5,7 +5,7 @@ from __future__ import annotations
 import threading
 import time
 import uuid
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional, Tuple
 
 from taskqueue import tasks
 
@@ -37,16 +37,26 @@ class InMemoryJob:
         kwargs: Dict[str, Any],
         *,
         queue: "InMemoryQueue",
+        meta: Optional[Dict[str, Any]] = None,
+        job_timeout: Optional[int] = None,
+        result_ttl: Optional[int] = None,
+        failure_ttl: Optional[int] = None,
     ) -> None:
         self.id = str(uuid.uuid4())
         self.func = func
         self.args = args
         self.kwargs = kwargs
         self.queue = queue
-        self.meta: Dict[str, Any] = {"status": "queued"}
+        base_meta = {"status": "queued", "progress": 0, "segment": 0}
+        if meta:
+            base_meta.update(meta)
+        self.meta: Dict[str, Any] = base_meta
         self._status = "queued"
         self._result: Any = None
         self._exception: Optional[BaseException] = None
+        self.timeout = job_timeout
+        self.result_ttl = result_ttl
+        self.failure_ttl = failure_ttl
         self._thread = threading.Thread(target=self._run, daemon=True)
         InMemoryRedis._jobs[self.id] = self
         self._thread.start()
@@ -95,7 +105,20 @@ class InMemoryQueue:
         self.connection = connection or InMemoryRedis()
 
     def enqueue(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> InMemoryJob:
-        job = InMemoryJob(func, args, kwargs, queue=self)
+        meta = kwargs.pop("meta", None)
+        job_timeout = kwargs.pop("job_timeout", None)
+        result_ttl = kwargs.pop("result_ttl", None)
+        failure_ttl = kwargs.pop("failure_ttl", None)
+        job = InMemoryJob(
+            func,
+            args,
+            kwargs,
+            queue=self,
+            meta=meta,
+            job_timeout=job_timeout,
+            result_ttl=result_ttl,
+            failure_ttl=failure_ttl,
+        )
         return job
 
     def fetch_job(self, job_id: str) -> Optional[InMemoryJob]:
