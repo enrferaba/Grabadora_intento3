@@ -67,6 +67,9 @@ except ImportError:  # pragma: no cover
         def model_dump(self) -> dict:  # pragma: no cover - compatibility helper
             return self.dict()
 
+        def model_dump(self) -> dict:  # pragma: no cover - compatibility helper
+            return self.dict()
+
         @classmethod
         def from_orm(cls, obj):  # pragma: no cover - minimal implementation
             data = {}
