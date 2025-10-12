@@ -22,6 +22,8 @@ export function RecordPage({ onLibraryRefresh }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const [title, setTitle] = useState("Grabación rápida");
+  const [viewerFontSize, setViewerFontSize] = useState(1.1);
+  const [viewerFullscreen, setViewerFullscreen] = useState(false);
   const stopStreamRef = useRef<() => void>();
 
   useEffect(() => () => {
@@ -73,6 +75,7 @@ export function RecordPage({ onLibraryRefresh }: Props) {
       setTokens([]);
       setStatus("recording");
       setError(null);
+      setViewerFullscreen(false);
     } catch (err) {
       const message = err instanceof Error ? err.message : "No se pudo acceder al micrófono";
       setError(message);
@@ -207,8 +210,17 @@ export function RecordPage({ onLibraryRefresh }: Props) {
           {error && <div style={{ color: "#fca5a5" }}>{error}</div>}
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-          <AuthPanel onAuthenticated={onLibraryRefresh} onLogout={onLibraryRefresh} />
-          <SseViewer tokens={tokens} status={status} error={error} onRetry={() => jobId && startStream({ job_id: jobId })} />
+      <AuthPanel onAuthenticated={onLibraryRefresh} onLogout={onLibraryRefresh} />
+          <SseViewer
+            tokens={tokens}
+            status={status}
+            error={error}
+            onRetry={() => jobId && startStream({ job_id: jobId })}
+            fontSize={viewerFontSize}
+            onFontSizeChange={(size) => setViewerFontSize(Math.min(Math.max(size, 0.8), 2.4))}
+            fullscreen={viewerFullscreen}
+            onToggleFullscreen={() => setViewerFullscreen((value) => !value)}
+          />
         </div>
       </section>
     </div>

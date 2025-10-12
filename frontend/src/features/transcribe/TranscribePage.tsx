@@ -3,6 +3,7 @@ import { qualityProfiles, streamTranscription, uploadTranscription } from "@/lib
 import { AuthPanel } from "@/features/account/components/AuthPanel";
 import { SseViewer } from "@/features/transcribe/components/SseViewer";
 import { Uploader } from "@/features/transcribe/components/Uploader";
+import { TranscriptionHistory } from "@/features/transcribe/components/TranscriptionHistory";
 
 interface Props {
   onLibraryRefresh?: () => void;
@@ -25,6 +26,9 @@ export function TranscribePage({ onLibraryRefresh, requireAuth = true }: Props) 
   const [diarization, setDiarization] = useState(false);
   const [wordTimestamps, setWordTimestamps] = useState(true);
   const stopStreamRef = useRef<() => void>();
+  const [viewerFontSize, setViewerFontSize] = useState(1.1);
+  const [viewerFullscreen, setViewerFullscreen] = useState(false);
+  const [historyRefreshToken, setHistoryRefreshToken] = useState(0);
 
   useEffect(() => () => stopStreamRef.current?.(), []);
 
@@ -40,6 +44,7 @@ export function TranscribePage({ onLibraryRefresh, requireAuth = true }: Props) 
         setStatus("completed");
         setCompletedPayload(payload);
         onLibraryRefresh?.();
+        setHistoryRefreshToken((value) => value + 1);
       },
       onError(err) {
         setError(err.message);
@@ -82,6 +87,7 @@ export function TranscribePage({ onLibraryRefresh, requireAuth = true }: Props) 
     setError(null);
     setJobId(null);
     setCompletedPayload(null);
+    setViewerFullscreen(false);
   }
 
   const statusPalette: Record<FlowStatus, string> = {
@@ -98,136 +104,102 @@ export function TranscribePage({ onLibraryRefresh, requireAuth = true }: Props) 
       <section
         style={{
           display: "grid",
-          gridTemplateColumns: "minmax(320px, 1fr) minmax(420px, 1.15fr)",
+          gridTemplateColumns: "minmax(320px, 1fr) minmax(420px, 1.1fr)",
           gap: "2rem",
           alignItems: "stretch",
           width: "100%",
         }}
       >
-        <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-          <div
-            className="card"
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "1.25rem",
-              background: "linear-gradient(135deg, rgba(15,23,42,0.95), rgba(2,6,23,0.85))",
-              border: "1px solid rgba(148,163,184,0.2)",
-              boxShadow: "0 25px 60px -35px rgba(15,23,42,0.8)",
-            }}
-          >
-            <header style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem" }}>
-                <div>
-                  <h2 style={{ margin: 0, fontSize: "1.65rem" }}>Sube tu audio</h2>
-                  <p style={{ margin: 0, color: "#94a3b8", lineHeight: 1.6 }}>
-                    Arrastra y suelta o selecciona un archivo. Comenzamos a transcribir en cuanto lo recibimos.
-                  </p>
-                </div>
-                <span
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "0.4rem",
-                    padding: "0.35rem 0.85rem",
-                    borderRadius: "999px",
-                    background: statusPalette[status],
-                    color: "#0f172a",
-                    fontSize: "0.8rem",
-                    fontWeight: 600,
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {status === "idle" && "Listo"}
-                  {status === "uploading" && `Subiendo ${uploadProgress}%`}
-                  {status === "streaming" && "Transcribiendo"}
-                  {status === "completed" && "Completado"}
-                  {status === "error" && "Error"}
-                  {status === "recording" && "Grabando"}
-                </span>
+        <div className="card" style={{ display: "flex", flexDirection: "column", gap: "1.5rem", padding: "2rem" }}>
+          <header style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem" }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: "1.65rem" }}>Sube y transcribe</h2>
+                <p style={{ margin: 0, color: "#94a3b8", lineHeight: 1.6 }}>
+                  Selecciona tu archivo y recibe la transcripción en vivo al instante.
+                </p>
               </div>
-              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                {qualityProfiles().map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => setProfile(item.id)}
-                    style={{
-                      borderRadius: "999px",
-                      padding: "0.35rem 0.95rem",
-                      border: profile === item.id ? "1px solid #38bdf8" : "1px solid rgba(148,163,184,0.35)",
-                      background: profile === item.id ? "rgba(56,189,248,0.15)" : "rgba(15,23,42,0.4)",
-                      color: "#e2e8f0",
-                      cursor: "pointer",
-                      transition: "all 0.2s ease",
-                    }}
-                  >
-                    <strong style={{ display: "block", fontSize: "0.85rem" }}>{item.title}</strong>
-                    <span style={{ fontSize: "0.7rem", color: "#94a3b8" }}>{item.description}</span>
-                  </button>
-                ))}
-              </div>
-            </header>
-            <Uploader onSelect={handleSubmit} busy={status === "uploading" || status === "streaming"} />
-            {(status === "completed" || status === "error") && (
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem" }}>
-                <div style={{ color: status === "completed" ? "#22c55e" : "#fca5a5" }}>
-                  {status === "completed"
-                    ? "Transcripción completada. Encuéntrala en tu biblioteca."
-                    : error ?? "No se pudo completar la transcripción."}
-                </div>
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.4rem",
+                  padding: "0.35rem 0.85rem",
+                  borderRadius: "999px",
+                  background: statusPalette[status],
+                  color: "#0f172a",
+                  fontSize: "0.8rem",
+                  fontWeight: 600,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {status === "idle" && "Listo"}
+                {status === "uploading" && `Subiendo ${uploadProgress}%`}
+                {status === "streaming" && "Transcribiendo"}
+                {status === "completed" && "Completado"}
+                {status === "error" && "Error"}
+              </span>
+            </div>
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+              {qualityProfiles().map((item) => (
                 <button
+                  key={item.id}
                   type="button"
-                  onClick={resetFlow}
+                  onClick={() => setProfile(item.id)}
                   style={{
                     borderRadius: "999px",
-                    border: "1px solid rgba(148,163,184,0.35)",
-                    background: "transparent",
-                    color: "#cbd5f5",
-                    padding: "0.55rem 1.4rem",
+                    padding: "0.35rem 0.95rem",
+                    border: profile === item.id ? "1px solid #38bdf8" : "1px solid rgba(148,163,184,0.35)",
+                    background: profile === item.id ? "rgba(56,189,248,0.18)" : "rgba(15,23,42,0.55)",
+                    color: "#e2e8f0",
                     cursor: "pointer",
+                    transition: "all 0.2s ease",
                   }}
                 >
-                  Nuevo audio
+                  <strong style={{ display: "block", fontSize: "0.85rem" }}>{item.title}</strong>
+                  <span style={{ fontSize: "0.7rem", color: "#94a3b8" }}>{item.description}</span>
                 </button>
-              </div>
-            )}
+              ))}
+            </div>
+          </header>
+
+          <Uploader onSelect={handleSubmit} busy={status === "uploading" || status === "streaming"} />
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1rem" }}>
+            <label style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+              Idioma
+              <select value={language} onChange={(event) => setLanguage(event.target.value)}>
+                <option value="auto">Automático</option>
+                <option value="es">Español</option>
+                <option value="en">Inglés</option>
+                <option value="fr">Francés</option>
+                <option value="de">Alemán</option>
+              </select>
+            </label>
+            <label style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+              Título (opcional)
+              <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Reunión semanal" />
+            </label>
+            <label style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+              Etiquetas (opcional)
+              <input value={tags} onChange={(event) => setTags(event.target.value)} placeholder="reunión, sprint, tareas" />
+            </label>
           </div>
 
-          <div className="card" style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-            <h3 style={{ margin: 0 }}>Detalles de la transcripción</h3>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem" }}>
-              <label style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                Idioma
-                <select value={language} onChange={(event) => setLanguage(event.target.value)}>
-                  <option value="auto">Automático</option>
-                  <option value="es">Español</option>
-                  <option value="en">Inglés</option>
-                  <option value="fr">Francés</option>
-                  <option value="de">Alemán</option>
-                </select>
-              </label>
-              <label style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                Título
-                <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Reunión semanal" />
-              </label>
-              <label style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                Etiquetas
-                <input value={tags} onChange={(event) => setTags(event.target.value)} placeholder="reunión, sprint, tareas" />
-              </label>
-            </div>
-            <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap" }}>
-              <label style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                <input type="checkbox" checked={diarization} onChange={(event) => setDiarization(event.target.checked)} />
-                Diarización experimental
-              </label>
-              <label style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                <input type="checkbox" checked={wordTimestamps} onChange={(event) => setWordTimestamps(event.target.checked)} />
-                Marcas temporales por palabra
-              </label>
-            </div>
-            {status === "uploading" && (
-              <div style={{
+          <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <input type="checkbox" checked={diarization} onChange={(event) => setDiarization(event.target.checked)} />
+              Diarización experimental
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <input type="checkbox" checked={wordTimestamps} onChange={(event) => setWordTimestamps(event.target.checked)} />
+              Marcas temporales por palabra
+            </label>
+          </div>
+
+          {status === "uploading" && (
+            <div
+              style={{
                 display: "flex",
                 alignItems: "center",
                 gap: "0.75rem",
@@ -235,28 +207,63 @@ export function TranscribePage({ onLibraryRefresh, requireAuth = true }: Props) 
                 borderRadius: "12px",
                 padding: "0.75rem 1rem",
                 color: "#e0f2fe",
-              }}>
-                <span style={{ fontSize: "0.8rem", letterSpacing: "0.05em" }}>Subiendo {uploadProgress}%</span>
-                <div style={{ flex: 1, height: "6px", background: "rgba(148,163,184,0.3)", borderRadius: "999px" }}>
-                  <div
-                    style={{
-                      width: `${uploadProgress}%`,
-                      height: "100%",
-                      borderRadius: "999px",
-                      background: "linear-gradient(90deg, #38bdf8, #60a5fa)",
-                      transition: "width 0.2s ease",
-                    }}
-                  />
-                </div>
+              }}
+            >
+              <span style={{ fontSize: "0.8rem", letterSpacing: "0.05em" }}>Subiendo {uploadProgress}%</span>
+              <div style={{ flex: 1, height: "6px", background: "rgba(148,163,184,0.3)", borderRadius: "999px" }}>
+                <div
+                  style={{
+                    width: `${uploadProgress}%`,
+                    height: "100%",
+                    borderRadius: "999px",
+                    background: "linear-gradient(90deg, #38bdf8, #60a5fa)",
+                    transition: "width 0.2s ease",
+                  }}
+                />
               </div>
-            )}
-          </div>
+            </div>
+          )}
+
+          {(status === "completed" || status === "error") && (
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem" }}>
+              <div style={{ color: status === "completed" ? "#22c55e" : "#fca5a5" }}>
+                {status === "completed"
+                  ? "Transcripción completada. Revisa tu historial para descargarla."
+                  : error ?? "No se pudo completar la transcripción."}
+              </div>
+              <button
+                type="button"
+                onClick={resetFlow}
+                style={{
+                  borderRadius: "999px",
+                  border: "1px solid rgba(148,163,184,0.35)",
+                  background: "transparent",
+                  color: "#cbd5f5",
+                  padding: "0.55rem 1.4rem",
+                  cursor: "pointer",
+                }}
+              >
+                Nuevo audio
+              </button>
+            </div>
+          )}
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem", minHeight: "100%" }}>
-          <SseViewer tokens={tokens} status={status} error={error} onRetry={() => jobId && startStream({ job_id: jobId })} />
-          {requireAuth && <AuthPanel onAuthenticated={onLibraryRefresh} onLogout={onLibraryRefresh} />}
-        </div>
+
+        <SseViewer
+          tokens={tokens}
+          status={status}
+          error={error}
+          onRetry={() => jobId && startStream({ job_id: jobId })}
+          fontSize={viewerFontSize}
+          onFontSizeChange={(size) => setViewerFontSize(Math.min(Math.max(size, 0.8), 2.4))}
+          fullscreen={viewerFullscreen}
+          onToggleFullscreen={() => setViewerFullscreen((value) => !value)}
+        />
       </section>
+
+      <TranscriptionHistory refreshKey={historyRefreshToken} onSelect={() => setViewerFullscreen(false)} />
+
+      {requireAuth && <AuthPanel onAuthenticated={onLibraryRefresh} onLogout={onLibraryRefresh} />}
     </div>
   );
 }

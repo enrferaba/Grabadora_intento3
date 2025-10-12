@@ -7,6 +7,7 @@ Grabadora es una plataforma de transcripción en streaming pensada para uso real
 - **SPA lista para usuarios**: la carpeta `frontend/` incluye la SPA empaquetada en `dist/` (sin dependencias de Node) y el código fuente React/Vite (`src/`) organizado en `app/`, `features/` y `lib/` para que puedas extender componentes sin perderte. Transcribir, Grabar y Biblioteca funcionan con autenticación JWT, drag & drop, monitor de micro, SSE y exportaciones.
 - **Biblioteca con base de datos**: se introdujo el modelo `Transcript` y endpoints REST (`GET /transcripts`, `GET /transcripts/{id}`, `GET /transcripts/{id}/download`, `POST /transcripts/{id}/export`) para listar, buscar y descargar transcripciones finales.
 - **Streaming enriquecido**: los eventos `delta` del SSE son JSON con `{text, t0, t1}`; el evento `completed` añade duración, idioma y perfil de calidad. Las pruebas se actualizaron para validar el nuevo contrato.
+- **Fallback de transcripción**: si `faster-whisper` no está instalado o falla al inicializar, el servicio genera una transcripción simulada con tokens SSE reales para que la app y la UI funcionen en entornos ligeros (por ejemplo, Windows sin GPU) mientras instalas las dependencias reales.
 - **Cola en memoria integrada**: si Redis o RQ no están disponibles, la API activa automáticamente una cola en memoria que ejecuta los trabajos en segundo plano y mantiene los SSE funcionando para `python ejecutar.py` y entornos sin Docker.
 - **Worker con metadatos persistentes**: cada job registra progreso, perfil de calidad y segmentos en la base de datos, de modo que la Biblioteca pueda mostrar estado, duración y exportaciones aunque el worker se ejecute en otra máquina.
 - **Frontend servido desde FastAPI**: el build de Vite se expone desde `/` y se monta `/assets` como estático. Si no se ha compilado la SPA, FastAPI cae en la landing básica para debugging.
@@ -57,7 +58,7 @@ Consulta `app/config.py` y `.env.example` para la lista completa.
 
 ## Cómo usar la interfaz web
 
-- **Transcribir**: arrastra un archivo o selecciónalo desde el explorador. Elige idioma, perfil de calidad (Rápido/Balanced/Preciso), activa diarización y observa los tokens en vivo. La tarjeta de "Transcripción en vivo" permanece visible con autoscroll, resaltando siempre los últimos deltas. Guarda en biblioteca automáticamente.
+- **Transcribir**: arrastra un archivo o selecciónalo desde el explorador. Elige idioma, perfil de calidad (Rápido/Balanced/Preciso), activa diarización y observa los tokens en vivo. El panel de transcripción permite cambiar tamaño de letra, ponerlo en pantalla completa y mantiene autoscroll mostrando siempre los últimos deltas. Al terminar, el historial inferior se refresca con el nuevo estado.
 - **Grabar**: usa el micro del navegador con visualizador de nivel y reconexión automática. Al detener la grabación se lanza la transcripción y se muestra el stream SSE.
 - **Biblioteca**: lista tus transcripciones con búsqueda en vivo, chips de estado, exportaciones a TXT/MD/SRT y acciones "Enviar a Notion/Trello". Cada tarjeta muestra título, etiquetas, calidad y estado.
 
@@ -140,6 +141,10 @@ Consulta `ejecutar.md` para una versión abreviada (un único comando) y sugeren
 - **`RuntimeError: redis package is not installed`**: ya no deberías verlo; la
   API usa la cola en memoria cuando faltan Redis/RQ. Si quieres forzar Redis,
   instala las dependencias (`pip install redis rq`) o levanta el stack con Docker.
+- **`faster-whisper` ausente o error al cargar el modelo**: la app responde con
+  una transcripción simulada y mantiene el streaming SSE operativo. Es útil para
+  demos rápidas, pero instala `pip install faster-whisper` y habilita GPU para
+  obtener resultados reales.
 - **Avisos de Pylance/VSCode sobre imports faltantes (`redis`, `rq`, `boto3`,
   `pytest`, etc.)**: se deben a paquetes opcionales que aún no están instalados
   en tu entorno local. Ejecuta `python doctor.py --install-missing` para resolverlos

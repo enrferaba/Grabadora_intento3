@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 interface UploaderProps {
   onSelect: (file: File) => void;
@@ -8,6 +8,7 @@ interface UploaderProps {
 
 export function Uploader({ onSelect, accept = "audio/*", busy = false }: UploaderProps) {
   const [dragActive, setDragActive] = useState(false);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const borderColor = useMemo(() => (dragActive ? "#38bdf8" : "rgba(148,163,184,0.4)"), [dragActive]);
 
   const handleFiles = useCallback(
@@ -51,6 +52,7 @@ export function Uploader({ onSelect, accept = "audio/*", busy = false }: Uploade
       }}
     >
       <input
+        ref={inputRef}
         id="audio-uploader"
         type="file"
         accept={accept}
@@ -64,7 +66,17 @@ export function Uploader({ onSelect, accept = "audio/*", busy = false }: Uploade
       <p style={{ color: "#94a3b8", textAlign: "center", maxWidth: "360px" }}>
         MP3, WAV, AAC, hasta 200&nbsp;MB. También puedes grabar directamente desde la pestaña "Grabar".
       </p>
-      <button className="primary" type="button" disabled={busy}>
+      <button
+        className="primary"
+        type="button"
+        disabled={busy}
+        onClick={(event) => {
+          event.preventDefault();
+          if (!busy) {
+            inputRef.current?.click();
+          }
+        }}
+      >
         Explorar archivos
       </button>
     </label>
