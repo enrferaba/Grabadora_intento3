@@ -47,6 +47,7 @@ from ..schemas import (
     SearchResponse,
     TranscriptionCreateResponse,
     TranscriptionDetail,
+    build_transcription_detail,
 )
 from ..utils.debug import append_debug_event
 from ..utils.storage import (
@@ -57,6 +58,7 @@ from ..utils.storage import (
     save_upload_file,
     write_atomic_text,
 )
+from storage.s3 import S3StorageClient
 from ..whisper_service import (
     BaseTranscriber,
     TranscriptionResult,
@@ -1301,14 +1303,25 @@ def list_transcriptions(
             )
         )
     query = query.order_by(Transcription.created_at.desc())
-    results = [TranscriptionDetail.from_orm(item) for item in query.all()]
+    storage = S3StorageClient()
+    results: List[TranscriptionDetail] = []
+    for item in query.all():
+        transcript_key = getattr(item, "transcript_key", None)
+        presigned_url = None
+        if transcript_key:
+            presigned_url = storage.create_presigned_url(transcript_key)
+        results.append(build_transcription_detail(item, transcript_url=presigned_url))
     return SearchResponse(results=results, total=len(results))
 
 
 @router.get("/{transcription_id}", response_model=TranscriptionDetail)
 def get_transcription(transcription_id: int, session: Session = Depends(_get_session)) -> TranscriptionDetail:
     transcription = _get_transcription_or_404(session, transcription_id)
-    return TranscriptionDetail.from_orm(transcription)
+    transcript_key = getattr(transcription, "transcript_key", None)
+    presigned_url = None
+    if transcript_key:
+        presigned_url = S3StorageClient().create_presigned_url(transcript_key)
+    return build_transcription_detail(transcription, transcript_url=presigned_url)
 
 
 @router.get("/{transcription_id}/audio")

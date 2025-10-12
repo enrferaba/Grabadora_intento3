@@ -14,6 +14,7 @@ try:  # pragma: no cover - optional dependency
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import HTMLResponse, JSONResponse, Response
     from fastapi.staticfiles import StaticFiles
+    from starlette.requests import ClientDisconnect
 except ImportError:  # pragma: no cover
     FastAPI = None  # type: ignore
 
@@ -66,6 +67,9 @@ except ImportError:  # pragma: no cover
     class CORSMiddleware:  # type: ignore
         def __init__(self, *args, **kwargs) -> None:
             raise RuntimeError("FastAPI is required for CORS middleware")
+
+    class ClientDisconnect(Exception):  # type: ignore
+        pass
 
 try:  # pragma: no cover - optional dependency
     from sse_starlette.sse import EventSourceResponse
@@ -280,6 +284,8 @@ API_ERRORS = Counter("api_errors_total", "Total API errors", namespace=settings.
 QUEUE_LENGTH = Gauge("queue_length", "Number of queued transcription jobs", namespace=settings.prometheus_namespace)
 GPU_USAGE = Gauge("gpu_memory_usage_bytes", "Approximate GPU memory usage", namespace=settings.prometheus_namespace)
 
+SPA_MOUNTED = False
+
 
 def _sample_gpu_usage() -> None:
     try:
@@ -333,14 +339,17 @@ def _transcript_to_detail(transcript: Transcript, *, include_url: bool = True) -
     storage = S3StorageClient()
     transcript_url = None
     if include_url and getattr(transcript, "transcript_key", None):
-        transcript_url = storage.create_presigned_url(transcript.transcript_key)
+        transcript_url = storage.create_presigned_url(
+            transcript.transcript_key,
+            expires_in=getattr(settings, "s3_presigned_ttl", 86400),
+        )
     segments_raw = getattr(transcript, "segments", None)
     try:
         segments = json.loads(segments_raw) if segments_raw else []
     except json.JSONDecodeError:
         segments = []
     return TranscriptDetail(
-        **summary.dict(),
+        **summary.model_dump(),
         audio_key=transcript.audio_key,
         transcript_key=getattr(transcript, "transcript_key", None),
         transcript_url=transcript_url,
@@ -358,31 +367,67 @@ def _spa_index() -> HTMLResponse:
     return HTMLResponse("<h1>Grabadora</h1><p>Frontend assets missing.</p>")
 
 
-async def _stream_job(job_id: str, redis: object | None = None) -> AsyncGenerator[Dict[str, str], None]:
+async def _stream_job(
+    job_id: str,
+    redis: object | None = None,
+    *,
+    expected_user_id: int | None = None,
+) -> AsyncGenerator[Dict[str, str], None]:
     if redis is not None:
         queue = Queue(name=settings.rq_default_queue, connection=redis)  # type: ignore[call-arg]
     else:
         queue, _ = _obtain_queue()
     job = queue.fetch_job(job_id)
     if job is None:
-        yield {"event": "error", "data": "job-not-found"}
+        yield {"event": "error", "data": json.dumps({"detail": "job-not-found"})}
         return
 
-    last_progress = 0
+    meta: Dict = getattr(job, "meta", {}) or {}
+    if expected_user_id is not None and meta.get("user_id") not in {expected_user_id, None}:
+        yield {"event": "error", "data": json.dumps({"detail": "job-not-found"})}
+        return
+
+    last_progress = int(meta.get("progress", 0) or 0)
+    loop = asyncio.get_running_loop()
+    heartbeat_interval = 10.0
+    last_heartbeat = loop.time()
+
     while True:
-        job.refresh()
-        status = job.get_status(refresh=False)
-        meta: Dict = job.meta or {}
+        try:
+            job.refresh()
+        except Exception:  # pragma: no cover - defensive
+            pass
+
+        try:
+            status = job.get_status(refresh=False)
+        except Exception:  # pragma: no cover - defensive
+            status = meta.get("status", "unknown")
+
+        meta = getattr(job, "meta", {}) or {}
+        if expected_user_id is not None and meta.get("user_id") not in {expected_user_id, None}:
+            yield {"event": "error", "data": json.dumps({"detail": "job-not-found"})}
+            return
+
         queue_size = _queue_length(queue)
         try:
             QUEUE_LENGTH.set(float(queue_size or 0))
         except Exception:  # pragma: no cover - defensive
             QUEUE_LENGTH.set(0)
         _sample_gpu_usage()
-        if meta.get("progress", 0) > last_progress and meta.get("last_token"):
-            last_progress = meta["progress"]
-            yield {"event": "delta", "data": meta["last_token"]}
-        if meta.get("status") == "completed":
+
+        token_payload = meta.get("last_token")
+        if isinstance(token_payload, dict):
+            token_payload_text = json.dumps(token_payload)
+        else:
+            token_payload_text = token_payload
+
+        progress_value = int(meta.get("progress", 0) or 0)
+        if progress_value > last_progress and token_payload_text:
+            last_progress = progress_value
+            yield {"event": "delta", "data": token_payload_text}
+
+        meta_status = meta.get("status") or status
+        if meta_status == "completed":
             payload = json.dumps(
                 {
                     "job_id": job.id,
@@ -394,10 +439,29 @@ async def _stream_job(job_id: str, redis: object | None = None) -> AsyncGenerato
             )
             yield {"event": "completed", "data": payload}
             break
-        if status == "failed":
-            error_payload = json.dumps({"job_id": job.id, "detail": meta.get("error_message", "unknown")})
+
+        if meta_status == "failed" or status == "failed":
+            error_payload = json.dumps(
+                {
+                    "job_id": job.id,
+                    "detail": meta.get("error_message", "unknown"),
+                }
+            )
             yield {"event": "error", "data": error_payload}
             break
+
+        now = loop.time()
+        if now - last_heartbeat >= heartbeat_interval:
+            heartbeat_payload = json.dumps(
+                {
+                    "job_id": job.id,
+                    "status": meta_status,
+                    "progress": progress_value,
+                }
+            )
+            yield {"event": "heartbeat", "data": heartbeat_payload}
+            last_heartbeat = now
+
         await asyncio.sleep(0.5)
 
 
@@ -405,6 +469,8 @@ if app is not None:
 
     if StaticFiles is not None and FRONTEND_DIST.exists():
         app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="spa-assets")
+        app.mount("/", StaticFiles(directory=FRONTEND_DIST, html=True), name="spa")
+        SPA_MOUNTED = True
 
     @app.exception_handler(Exception)
     async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
@@ -433,7 +499,7 @@ if app is not None:
             session.add(user)
             session.flush()
             session.refresh(user)
-            return UserRead.from_orm(user)
+            return UserRead.model_validate(user)
 
     @app.post("/users", response_model=UserRead, status_code=201)
     async def create_user(payload: UserCreate) -> UserRead:
@@ -461,6 +527,7 @@ if app is not None:
         storage.upload_audio(file.file, audio_key)
 
         primary_profile_id = user.profiles[0].id if getattr(user, "profiles", []) else None
+        enqueued_at = datetime.utcnow().isoformat()
         job = queue.enqueue(  # type: ignore[call-arg]
             tasks.transcribe_job,
             audio_key,
@@ -468,7 +535,31 @@ if app is not None:
             profile_id=primary_profile_id,
             user_id=user.id,
             quality_profile=profile,
+            meta={
+                "status": "queued",
+                "progress": 0,
+                "segment": 0,
+                "user_id": user.id,
+                "quality_profile": profile,
+                "queued_at": enqueued_at,
+                "updated_at": enqueued_at,
+            },
+            job_timeout=getattr(settings, "rq_job_timeout", None),
+            result_ttl=getattr(settings, "rq_result_ttl", 86400),
+            failure_ttl=getattr(settings, "rq_failure_ttl", 3600),
         )
+        if getattr(job, "meta", None) is not None:
+            job.meta.setdefault("status", "queued")
+            job.meta.setdefault("progress", 0)
+            job.meta.setdefault("segment", 0)
+            job.meta.setdefault("user_id", user.id)
+            job.meta.setdefault("quality_profile", profile)
+            job.meta.setdefault("queued_at", enqueued_at)
+            job.meta["updated_at"] = enqueued_at
+            try:
+                job.save_meta()
+            except Exception:  # pragma: no cover - defensive when using fallback queue
+                pass
         try:
             QUEUE_LENGTH.set(float(_queue_length(queue)))
         except Exception:  # pragma: no cover - defensive
@@ -496,6 +587,12 @@ if app is not None:
             transcript.segments = json.dumps([])
             session.add(transcript)
             session.flush()
+            if getattr(job, "meta", None) is not None:
+                job.meta["transcript_id"] = transcript.id
+                try:
+                    job.save_meta()
+                except Exception:  # pragma: no cover - fallback queue
+                    pass
             log_payload = {
                 "job_id": job.id,
                 "audio_key": audio_key,
@@ -515,10 +612,57 @@ if app is not None:
     ) -> EventSourceResponse:
 
         async def event_generator() -> AsyncGenerator[Dict[str, str], None]:
-            async for event in _stream_job(job_id):
-                yield event
+            try:
+                async for event in _stream_job(job_id, expected_user_id=user.id):
+                    yield event
+            except ClientDisconnect:  # pragma: no cover - network race
+                logger.info("SSE client disconnected", extra={"job_id": job_id, "user_id": user.id})
+            except asyncio.CancelledError:  # pragma: no cover - shutdown handling
+                logger.info("SSE stream cancelled", extra={"job_id": job_id, "user_id": user.id})
+                raise
 
-        return EventSourceResponse(event_generator())
+        return EventSourceResponse(
+            event_generator(),
+            ping=10.0,
+            retry=5000,
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
+    @app.get("/jobs/{job_id}")
+    async def get_job_status(job_id: str, user: AuthenticatedUser = Depends(get_current_user)) -> JSONResponse:
+        queue, _ = _obtain_queue()
+        job = queue.fetch_job(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="Job not found")
+        meta: Dict = getattr(job, "meta", {}) or {}
+        if meta.get("user_id") not in {None, user.id}:
+            raise HTTPException(status_code=404, detail="Job not found")
+        try:
+            status = meta.get("status") or job.get_status(refresh=False)
+        except Exception:  # pragma: no cover - defensive
+            status = meta.get("status", "unknown")
+        payload: Dict[str, Optional[object]] = {
+            "job_id": job.id,
+            "status": status,
+            "progress": meta.get("progress", 0),
+            "segment": meta.get("segment"),
+            "transcript_id": meta.get("transcript_id"),
+            "quality_profile": meta.get("quality_profile"),
+            "updated_at": meta.get("updated_at"),
+        }
+        if meta.get("error_message"):
+            payload["error_message"] = meta.get("error_message")
+        transcript_key = meta.get("transcript_key")
+        if transcript_key:
+            storage = S3StorageClient()
+            payload["transcript_url"] = storage.create_presigned_url(
+                transcript_key,
+                expires_in=getattr(settings, "s3_presigned_ttl", 86400),
+            )
+        return JSONResponse(payload)
 
     @app.get("/transcripts", response_model=List[TranscriptSummary])
     async def list_transcripts(
@@ -628,13 +772,31 @@ if app is not None:
         _sample_gpu_usage()
         return JSONResponse({"status": "ok", "time": datetime.utcnow().isoformat()})
 
-    @app.get("/", response_class=HTMLResponse)
-    async def root() -> HTMLResponse:
-        return _spa_index()
+    if not SPA_MOUNTED:
+        @app.get("/", response_class=HTMLResponse)
+        async def root() -> HTMLResponse:
+            return _spa_index()
 
-    @app.get("/{full_path:path}", response_class=HTMLResponse)
-    async def spa_router(full_path: str) -> HTMLResponse:
-        reserved_prefixes = ("docs", "redoc", "openapi.json", "metrics", "healthz", "auth", "users", "transcribe", "transcripts")
-        if any(full_path.startswith(prefix) for prefix in reserved_prefixes):
-            raise HTTPException(status_code=404, detail="Not Found")
-        return _spa_index()
+        @app.get("/{full_path:path}", response_class=HTMLResponse)
+        async def spa_router(full_path: str) -> HTMLResponse:
+            reserved_prefixes = (
+                "docs",
+                "redoc",
+                "openapi.json",
+                "metrics",
+                "healthz",
+                "auth",
+                "users",
+                "transcribe",
+                "transcripts",
+                "jobs",
+            )
+            if any(full_path.startswith(prefix) for prefix in reserved_prefixes):
+                raise HTTPException(status_code=404, detail="Not Found")
+            return _spa_index()
+
+
+def create_app() -> FastAPI:
+    if app is None:
+        raise RuntimeError("FastAPI is not available")
+    return app

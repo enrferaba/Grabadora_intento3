@@ -30,7 +30,7 @@ def list_pricing_plans(session: Session = Depends(_get_session)) -> List[Pricing
         .order_by(PricingTier.price_cents.asc())
         .all()
     )
-    return [PricingTierSchema.from_orm(tier) for tier in tiers]
+    return [PricingTierSchema.model_validate(tier) for tier in tiers]
 
 
 @router.post("/checkout", response_model=PurchaseResponse, status_code=201)

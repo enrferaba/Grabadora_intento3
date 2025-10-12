@@ -1,18 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { qualityProfiles, streamTranscription, uploadTranscription } from "@/lib/api";
-import { AuthPanel } from "@/features/account/components/AuthPanel";
 import { SseViewer } from "@/features/transcribe/components/SseViewer";
 import { Uploader } from "@/features/transcribe/components/Uploader";
 import { TranscriptionHistory } from "@/features/transcribe/components/TranscriptionHistory";
 
 interface Props {
   onLibraryRefresh?: () => void;
-  requireAuth?: boolean;
 }
 
 type FlowStatus = "idle" | "uploading" | "streaming" | "completed" | "error" | "recording";
 
-export function TranscribePage({ onLibraryRefresh, requireAuth = true }: Props) {
+export function TranscribePage({ onLibraryRefresh }: Props) {
   const [language, setLanguage] = useState("auto");
   const [profile, setProfile] = useState("balanced");
   const [tags, setTags] = useState("reunión, minutos");
@@ -263,7 +261,6 @@ export function TranscribePage({ onLibraryRefresh, requireAuth = true }: Props) 
 
       <TranscriptionHistory refreshKey={historyRefreshToken} onSelect={() => setViewerFullscreen(false)} />
 
-      {requireAuth && <AuthPanel onAuthenticated={onLibraryRefresh} onLogout={onLibraryRefresh} />}
     </div>
   );
 }
