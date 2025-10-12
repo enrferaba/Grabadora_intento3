@@ -6,7 +6,7 @@ const elements = {
   tabs: document.querySelectorAll(".tabs__item"),
   panels: document.querySelectorAll(".panel"),
   heroAuth: document.querySelector('[data-action="open-auth"]'),
-  heroTranscribe: document.querySelector('[data-action="open-transcribe"]'),
+  heroTranscribe: document.querySelectorAll('[data-action="open-transcribe"]'),
   signupForm: document.getElementById("signup-form"),
   loginForm: document.getElementById("login-form"),
   transcribeForm: document.getElementById("transcribe-form"),
@@ -16,6 +16,7 @@ const elements = {
   uploadProgress: document.getElementById("upload-progress"),
   toast: document.getElementById("toast"),
   accountEmail: document.getElementById("account-email"),
+  accountInitial: document.getElementById("account-initial"),
   metricMinutes: document.getElementById("metric-minutes"),
   metricQueue: document.getElementById("metric-queue"),
   metricSpeed: document.getElementById("metric-speed"),
@@ -27,6 +28,9 @@ const elements = {
   recordStop: document.querySelector('[data-action="stop-recording"]'),
   recordUpload: document.querySelector('[data-action="upload-recording"]'),
   recordPreview: document.getElementById("recording-preview"),
+  accountButton: document.querySelector('[data-action="toggle-account-menu"]'),
+  accountMenu: document.getElementById("account-menu"),
+  accountMenuItems: document.querySelectorAll("[data-menu-action]"),
 };
 
 const state = {
@@ -79,6 +83,7 @@ function setAuth(token, email, { guest = false } = {}) {
   state.guest = guest;
   persistAuth();
   updateAccount();
+  setAccountMenu(false);
   toggleAuthPanel(false);
   showToast(`Bienvenido${guest ? " (modo demo)" : ""}`);
   setActiveTab("transcribe");
@@ -91,6 +96,7 @@ function clearAuth() {
   state.guest = false;
   persistAuth();
   updateAccount();
+  setAccountMenu(false);
   showToast("Sesión cerrada");
 }
 
@@ -177,7 +183,18 @@ function toggleAuthPanel(visible) {
   }
 }
 
+function isAccountMenuOpen() {
+  return Boolean(elements.accountMenu) && !elements.accountMenu.hidden;
+}
+
+function setAccountMenu(open) {
+  if (!elements.accountMenu || !elements.accountButton) return;
+  elements.accountMenu.hidden = !open;
+  elements.accountButton.setAttribute("aria-expanded", String(open));
+}
+
 function setActiveTab(tabId) {
+  setAccountMenu(false);
   elements.tabs.forEach((tab) => {
     const match = tab.dataset.tab === tabId;
     tab.setAttribute("aria-selected", String(match));
@@ -345,7 +362,18 @@ function handleStreamEvent(raw) {
 }
 
 function updateAccount() {
-  elements.accountEmail.textContent = state.email ? `${state.email}${state.guest ? " (demo)" : ""}` : "Visitante";
+  if (elements.accountEmail) {
+    elements.accountEmail.textContent = state.email ? `${state.email}${state.guest ? " (demo)" : ""}` : "Visitante";
+  }
+  if (elements.accountInitial) {
+    const icon = state.email ? state.email.charAt(0).toUpperCase() : "👤";
+    elements.accountInitial.textContent = state.guest ? "★" : icon;
+  }
+  if (elements.accountButton) {
+    const label = state.email ? `Cuenta de ${state.email}` : "Opciones de cuenta";
+    elements.accountButton.setAttribute("aria-label", label);
+    elements.accountButton.setAttribute("title", label);
+  }
 }
 
 function updateMetrics({ profile } = {}) {
@@ -642,19 +670,73 @@ function bindEvents() {
     resetStream();
   });
 
-  elements.heroAuth.addEventListener("click", () => {
-    toggleAuthPanel(true);
-    setActiveTab("account");
+  if (elements.heroAuth) {
+    elements.heroAuth.addEventListener("click", () => {
+      toggleAuthPanel(true);
+      setActiveTab("account");
+    });
+  }
+
+  elements.heroTranscribe.forEach((trigger) => {
+    trigger.addEventListener("click", (event) => {
+      event.preventDefault();
+      if (!state.token) {
+        startGuestSession().catch((error) => {
+          console.error(error);
+          toggleAuthPanel(true);
+        });
+      }
+      setActiveTab("transcribe");
+    });
   });
 
-  elements.heroTranscribe.addEventListener("click", () => {
-    if (!state.token) {
-      startGuestSession().catch((error) => {
-        console.error(error);
+  if (elements.accountButton) {
+    elements.accountButton.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setAccountMenu(!isAccountMenuOpen());
+    });
+  }
+
+  elements.accountMenuItems.forEach((item) => {
+    item.addEventListener("click", (event) => {
+      event.preventDefault();
+      const action = event.currentTarget?.dataset.menuAction;
+      setAccountMenu(false);
+      if (action === "signup") {
         toggleAuthPanel(true);
-      });
+        setActiveTab("account");
+        elements.signupForm?.querySelector('input[name="email"]')?.focus();
+      } else if (action === "login") {
+        toggleAuthPanel(true);
+        setActiveTab("account");
+        elements.loginForm?.querySelector('input[name="email"]')?.focus();
+      } else if (action === "guest") {
+        startGuestSession().catch((error) => {
+          console.error(error);
+          toggleAuthPanel(true);
+        });
+        setActiveTab("transcribe");
+      }
+    });
+  });
+
+  document.addEventListener("click", (event) => {
+    if (!isAccountMenuOpen()) return;
+    if (
+      elements.accountMenu?.contains(event.target) ||
+      elements.accountButton?.contains(event.target)
+    ) {
+      return;
     }
-    setActiveTab("transcribe");
+    setAccountMenu(false);
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && isAccountMenuOpen()) {
+      setAccountMenu(false);
+      elements.accountButton?.focus();
+    }
   });
 
   elements.signupForm.addEventListener("submit", async (event) => {
@@ -719,6 +801,7 @@ function bindEvents() {
 function init() {
   readStoredAuth();
   updateAccount();
+  setAccountMenu(false);
   bindEvents();
   setupDragDrop();
   setupRecording();
