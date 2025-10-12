@@ -46,3 +46,17 @@ def test_transcription_streams_delta_tokens(monkeypatch):
 def test_invalid_quantization():
     with pytest.raises(ValueError):
         TranscriptionService(quantization="invalid")
+
+
+def test_simulated_transcription_when_model_missing(tmp_path):
+    audio_path = tmp_path / "demo.wav"
+    audio_path.write_bytes(b"fake audio payload")
+
+    service = TranscriptionService()
+
+    collected: list[dict] = []
+    result = service.transcribe(audio_path, token_callback=collected.append)
+
+    assert "Transcripción simulada" in result["text"]
+    assert result["segments"][0]["text"].startswith("Transcripción simulada")
+    assert collected, "expected simulated tokens to be emitted"

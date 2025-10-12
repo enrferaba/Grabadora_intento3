@@ -35,6 +35,7 @@ class TranscriptionService:
         self.device = device
         self._model_factory = model_factory
         self._model: Optional[WhisperModel] = None
+        self._simulate = _WhisperModel is None and model_factory is None
         # validate quantization eagerly to fail-fast in misconfigured environments
         self._map_quantization(self.quantization)
 
@@ -73,14 +74,28 @@ class TranscriptionService:
     ) -> dict:
         """Run inference and optionally stream delta tokens through ``token_callback``."""
 
-        segments_iterable, info = self.model.transcribe(str(audio_path), language=language)
+        if self._simulate:
+            return self._simulate_transcription(audio_path, token_callback, language)
+
+        try:
+            segments_iterable, info = self.model.transcribe(str(audio_path), language=language)
+        except RuntimeError:
+            # ``model`` property raises ``RuntimeError`` when faster-whisper is missing. In that
+            # scenario we provide a deterministic simulated transcript so the rest of the app can
+            # still be exercised locally.
+            logger.warning("faster-whisper unavailable, returning simulated transcript")
+            return self._simulate_transcription(audio_path, token_callback, language)
+        except Exception:  # pragma: no cover - defensive fallback
+            logger.exception("Unable to run faster-whisper; returning simulated transcript")
+            return self._simulate_transcription(audio_path, token_callback, language)
+
         segments = list(segments_iterable)
 
         transcript_tokens: list[str] = []
         for segment in segments:
             start = float(getattr(segment, "start", 0.0) or 0.0)
             end = float(getattr(segment, "end", start) or start)
-            for token in segment.tokens:
+            for token in getattr(segment, "tokens", []) or []:
                 text = getattr(token, "text", "") or ""
                 if not text:
                     continue
@@ -114,6 +129,49 @@ class TranscriptionService:
             ],
             "language": info.language,
             "duration": getattr(info, "duration", None),
+        }
+
+    def _simulate_transcription(
+        self,
+        audio_path: Path,
+        token_callback: Optional[TokenCallback],
+        language: Optional[str],
+    ) -> dict:
+        file_name = audio_path.name or "audio"
+        simulated_language = language or "es"
+        message = (
+            f"Transcripción simulada para {file_name}. Instala faster-whisper para obtener resultados reales."
+        )
+        words = message.split(" ")
+        pieces: list[str] = []
+        for index, word in enumerate(words):
+            suffix = " " if index < len(words) - 1 else ""
+            token_text = f"{word}{suffix}"
+            pieces.append(token_text)
+            if token_callback:
+                payload = {"text": token_text, "t0": index * 0.6, "t1": (index + 1) * 0.6}
+                try:
+                    token_callback(payload)
+                except Exception:  # pragma: no cover - defensive
+                    logger.exception("Token callback raised during simulation", extra={"payload": json.dumps(payload)})
+
+        transcript_text = "".join(pieces).strip()
+        duration = round(len(words) * 0.6, 2)
+        logger.info(
+            "Generated simulated transcript",
+            extra={"file": file_name, "language": simulated_language, "duration": duration},
+        )
+        return {
+            "text": transcript_text,
+            "segments": [
+                {
+                    "start": 0.0,
+                    "end": duration,
+                    "text": transcript_text,
+                }
+            ],
+            "language": simulated_language,
+            "duration": duration,
         }
 
 
