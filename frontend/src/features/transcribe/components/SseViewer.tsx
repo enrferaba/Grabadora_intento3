@@ -25,6 +25,17 @@ export function SseViewer({ tokens, status, error, onRetry, fontSize, onFontSize
     containerRef.current.scrollTop = containerRef.current.scrollHeight;
   }, [tokens]);
 
+  useEffect(() => {
+    function handleKey(event: KeyboardEvent) {
+      if (event.key === "Escape" && fullscreen) {
+        event.preventDefault();
+        onToggleFullscreen();
+      }
+    }
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [fullscreen, onToggleFullscreen]);
+
   const statusCopy: Record<SseViewerProps["status"], string> = {
     idle: "Listo para empezar",
     recording: "Grabando audio...",
@@ -49,10 +60,33 @@ export function SseViewer({ tokens, status, error, onRetry, fontSize, onFontSize
               alignItems: "center",
               justifyContent: "center",
               background: "rgba(15, 23, 42, 0.92)",
+              overflow: "auto",
             }
           : { width: "100%" }
       }
     >
+      {fullscreen && (
+        <button
+          type="button"
+          onClick={onToggleFullscreen}
+          style={{
+            position: "fixed",
+            top: "1.25rem",
+            right: "1.5rem",
+            borderRadius: "999px",
+            padding: "0.4rem 0.9rem",
+            background: "rgba(15,23,42,0.75)",
+            border: "1px solid rgba(148,163,184,0.35)",
+            color: "#e2e8f0",
+            fontWeight: 600,
+            cursor: "pointer",
+            boxShadow: "0 12px 25px -12px rgba(15,23,42,0.9)",
+          }}
+          aria-label="Salir de pantalla completa"
+        >
+          ✕ Salir
+        </button>
+      )}
       <div
         className="card"
         style={{
