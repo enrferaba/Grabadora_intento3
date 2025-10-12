@@ -1,14 +1,18 @@
 """SQLAlchemy engine and session management."""
 from __future__ import annotations
 
+import logging
+import os
 from contextlib import contextmanager
 from typing import Any, Iterator
 
 try:  # pragma: no cover - optional dependency
     from sqlalchemy import create_engine
+    from sqlalchemy.exc import OperationalError
     from sqlalchemy.orm import Session, sessionmaker
 except ImportError:  # pragma: no cover
     create_engine = None  # type: ignore
+    OperationalError = Exception  # type: ignore
     Session = Any  # type: ignore
     sessionmaker = None  # type: ignore
 
@@ -17,8 +21,39 @@ except ImportError:  # pragma: no cover
 else:
     from app.config import get_settings
 
+    logger = logging.getLogger(__name__)
+
     _session_factory: sessionmaker | None = None
     _session_error: Exception | None = None
+
+    _FALLBACK_ENV = "GRABADORA_FALLBACK_SQLITE_URL"
+    _DEFAULT_FALLBACK = "sqlite:///./grabadora.db"
+
+    def _bootstrap_factory(database_url: str) -> tuple[sessionmaker, Any]:
+        engine = create_engine(database_url, pool_pre_ping=True, future=True)
+        factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+        return factory, engine
+
+    def _initialize_fallback(exc: Exception) -> None:
+        """Configure a SQLite session factory when the primary database is unavailable."""
+
+        global _session_factory, _session_error
+        fallback_url = os.getenv(_FALLBACK_ENV, _DEFAULT_FALLBACK)
+        try:
+            factory, engine = _bootstrap_factory(fallback_url)
+            # Asegura las tablas para crear cuentas sin ejecutar migraciones manuales en local.
+            from models.user import Base  # lazy import to avoid circular dependency
+
+            Base.metadata.create_all(engine)  # type: ignore[arg-type]
+            logger.warning(
+                "Falling back to SQLite database at %s because the primary database is unavailable: %s",
+                fallback_url,
+                exc,
+            )
+            _session_factory = factory
+        except Exception as fallback_exc:  # pragma: no cover - catastrophic failure
+            _session_error = fallback_exc
+            logger.exception("Could not initialize fallback SQLite database", exc_info=fallback_exc)
 
     def _ensure_session_factory() -> None:
         """Create the SQLAlchemy session factory on demand."""
@@ -28,21 +63,23 @@ else:
             return
         settings = get_settings()
         try:
-            engine = create_engine(settings.database_url, pool_pre_ping=True, future=True)
-            _session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
-        except ModuleNotFoundError as exc:  # pragma: no cover - driver missing
-            _session_error = exc
+            factory, engine = _bootstrap_factory(settings.database_url)
+            # Touch the connection early to surface connectivity issues immediately.
+            with engine.connect():
+                pass
+            _session_factory = factory
+        except (ModuleNotFoundError, OperationalError) as exc:
+            _initialize_fallback(exc)
 
     @contextmanager
     def session_scope() -> Session:
         """Provide a transactional scope around a series of operations."""
 
         _ensure_session_factory()
-        if _session_error is not None:
+        if _session_factory is None:
             raise RuntimeError(
-                "Database driver not installed. Install psycopg2-binary or configure DATABASE_URL",
+                "No database engine could be initialized. Install the required drivers or configure DATABASE_URL.",
             ) from _session_error
-        assert _session_factory is not None  # narrow type for mypy
         session: Session = _session_factory()
         try:
             yield session

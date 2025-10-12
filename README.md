@@ -127,3 +127,8 @@ Consulta `ejecutar.md` para una versión abreviada (un único comando) y sugeren
   anteriores). Ese directorio colisiona con la librería estándar. El paquete
   `app` ya fuerza la carga del módulo oficial, pero si sigues viendo el error
   elimina o renombra esa carpeta antes de ejecutar `python ejecutar.py`.
+- **`sqlalchemy.exc.OperationalError` al crear cuenta**: si lanzas `python ejecutar.py`
+  sin PostgreSQL disponible, FastAPI cambia automáticamente a un archivo local
+  SQLite (`grabadora.db`). Se crea en la raíz del proyecto y permite registrar
+  usuarios y transcribir sin levantar Docker. Puedes personalizar la ruta con
+  `GRABADORA_FALLBACK_SQLITE_URL` o borrar el fichero para reiniciar el estado.

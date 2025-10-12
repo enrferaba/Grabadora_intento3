@@ -41,26 +41,71 @@
         </div>
       </header>
       <header class="hero">
-        <div class="hero__content">
-          <h1>Grabadora Inteligente</h1>
-          <p>Transcribe, graba y organiza tus conversaciones con ayuda de IA.</p>
-          <div class="hero__actions">
-            <button class="btn btn--primary" data-action="open-auth">Iniciar sesión</button>
-            <button class="btn" data-action="open-transcribe">Probar sin cuenta</button>
+        <div class="hero__primary card">
+          <div class="hero__headline">
+            <h1>Grabadora Inteligente</h1>
+            <p>Transcribe, graba y organiza tus conversaciones con ayuda de IA.</p>
+            <div class="hero__actions">
+              <button class="btn btn--primary" data-action="open-auth">Iniciar sesión</button>
+              <button class="btn" data-action="open-transcribe">Probar sin cuenta</button>
+            </div>
+          </div>
+          <div class="hero__metrics">
+            <div class="metric">
+              <span class="metric__value" id="metric-minutes">0 min</span>
+              <span class="metric__label">Minutos restantes</span>
+            </div>
+            <div class="metric">
+              <span class="metric__value" id="metric-queue">0</span>
+              <span class="metric__label">En cola</span>
+            </div>
+            <div class="metric">
+              <span class="metric__value" id="metric-speed">–</span>
+              <span class="metric__label">Perfil activo</span>
+            </div>
+          </div>
+          <div class="hero__profiles">
+            <div class="hero__profile">
+              <h4>Rápido (int8)</h4>
+              <p>Ideal para notas rápidas y modo demo.</p>
+            </div>
+            <div class="hero__profile">
+              <h4>Equilibrado (float16)</h4>
+              <p>Balance perfecto entre coste y precisión.</p>
+            </div>
+            <div class="hero__profile">
+              <h4>Preciso (float32)</h4>
+              <p>Para entrevistas y masterclass sin pérdidas.</p>
+            </div>
           </div>
         </div>
-        <div class="hero__metrics">
-          <div class="metric">
-            <span class="metric__value" id="metric-minutes">0 min</span>
-            <span class="metric__label">Minutos restantes</span>
+        <div class="hero__side">
+          <div class="card hero__features">
+            <h3>Así funciona</h3>
+            <ul class="hero__features-list">
+              <li>Sube audio y recibe subtítulos token a token vía SSE.</li>
+              <li>Graba desde el navegador con reconexión automática.</li>
+              <li>Organiza tu biblioteca con etiquetas, estados y exportaciones.</li>
+              <li>Comparte en Notion, Trello o por webhooks en un clic.</li>
+            </ul>
           </div>
-          <div class="metric">
-            <span class="metric__value" id="metric-queue">0</span>
-            <span class="metric__label">En cola</span>
-          </div>
-          <div class="metric">
-            <span class="metric__value" id="metric-speed">–</span>
-            <span class="metric__label">Perfil activo</span>
+          <div class="card hero__visual">
+            <div class="hero__visual-header">
+              <span class="hero__visual-dot hero__visual-dot--red"></span>
+              <span class="hero__visual-dot hero__visual-dot--yellow"></span>
+              <span class="hero__visual-dot hero__visual-dot--green"></span>
+              <span class="hero__visual-title">Sesión en vivo</span>
+            </div>
+            <div class="hero__visual-body">
+              <div class="hero__visual-wave">
+                <span></span><span></span><span></span><span></span><span></span><span></span>
+                <span></span><span></span><span></span><span></span><span></span><span></span>
+              </div>
+              <div class="hero__visual-caption">
+                <span class="hero__visual-chip">“Estoy llegando en 5 minutos”</span>
+                <span class="hero__visual-note">Deltas en vivo guardados en tu biblioteca</span>
+              </div>
+            </div>
           </div>
         </div>
       </header>

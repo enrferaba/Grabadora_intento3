@@ -136,7 +136,7 @@ async function signup(email, password) {
     method: "POST",
     body: JSON.stringify({ email, password }),
   });
-  showToast("Cuenta creada. Inicia sesión para continuar.");
+  await login(email, password);
 }
 
 async function login(email, password) {

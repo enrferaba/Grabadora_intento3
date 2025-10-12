@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { BibliotecaPage } from "@/pages/Biblioteca";
 import { GrabarPage } from "@/pages/Grabar";
@@ -223,8 +223,27 @@ function Navigation() {
 }
 
 export default function App() {
+  const navigate = useNavigate();
   const [refreshToken, setRefreshToken] = useState(0);
   const handleRefresh = () => setRefreshToken((value) => value + 1);
+  const goTo = (path: string) => navigate(path);
+
+  const metricStyle: CSSProperties = {
+    flex: "1 1 150px",
+    background: "rgba(30, 41, 59, 0.65)",
+    borderRadius: "20px",
+    padding: "1rem 1.25rem",
+    border: "1px solid rgba(148,163,184,0.15)",
+  };
+  const metricValueStyle: CSSProperties = {
+    display: "block",
+    fontSize: "1.8rem",
+    fontWeight: 600,
+  };
+  const metricLabelStyle: CSSProperties = {
+    color: "rgba(148,163,184,0.9)",
+    fontSize: "0.9rem",
+  };
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
@@ -233,42 +252,143 @@ export default function App() {
         <section
           style={{
             display: "grid",
-            gridTemplateColumns: "2fr 1fr",
+            gridTemplateColumns: "minmax(0, 1.55fr) minmax(0, 1fr)",
             gap: "2rem",
-            alignItems: "start",
+            alignItems: "stretch",
           }}
         >
-          <div className="card" style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-            <h1 style={{ margin: 0 }}>Tu asistente de transcripción con SSE en vivo</h1>
-            <p style={{ color: "#94a3b8", fontSize: "1.05rem" }}>
-              Arrastra audio, graba desde el micro y guarda todo en una biblioteca inteligente con exportación a Markdown, SRT y
-              conectores como Notion o Trello.
-            </p>
-            <div style={{ display: "grid", gap: "1rem", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
+          <div
+            className="card"
+            style={{
+              marginTop: 0,
+              display: "flex",
+              flexDirection: "column",
+              gap: "1.75rem",
+            }}
+          >
+            <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+              <h1 style={{ margin: 0 }}>Tu asistente de transcripción con SSE en vivo</h1>
+              <p style={{ color: "#94a3b8", fontSize: "1.05rem", maxWidth: "48ch" }}>
+                Arrastra audio, graba desde el micro y guarda todo en una biblioteca inteligente con exportación a Markdown, SRT
+                y conectores como Notion o Trello.
+              </p>
+              <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap" }}>
+                <button className="primary" onClick={() => goTo("/cuenta?mode=login")}>Iniciar sesión</button>
+                <button className="secondary" onClick={() => goTo("/transcribir")}>Probar sin cuenta</button>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap" }}>
+              <div style={metricStyle}>
+                <span style={metricValueStyle}>0&nbsp;min</span>
+                <span style={metricLabelStyle}>Minutos restantes</span>
+              </div>
+              <div style={metricStyle}>
+                <span style={metricValueStyle}>0</span>
+                <span style={metricLabelStyle}>En cola</span>
+              </div>
+              <div style={metricStyle}>
+                <span style={metricValueStyle}>–</span>
+                <span style={metricLabelStyle}>Perfil activo</span>
+              </div>
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                gap: "1rem",
+              }}
+            >
               {qualityProfiles().map((item) => (
                 <div
                   key={item.id}
                   style={{
                     padding: "1rem",
-                    borderRadius: "16px",
-                    background: "rgba(15, 23, 42, 0.7)",
-                    border: "1px solid rgba(148,163,184,0.25)",
+                    borderRadius: "18px",
+                    background: "rgba(15, 23, 42, 0.65)",
+                    border: "1px solid rgba(148,163,184,0.2)",
                   }}
                 >
-                  <h4 style={{ margin: "0 0 0.25rem 0" }}>{item.title}</h4>
+                  <h4 style={{ margin: "0 0 0.35rem 0" }}>{item.title}</h4>
                   <p style={{ margin: 0, color: "#94a3b8", fontSize: "0.9rem" }}>{item.description}</p>
                 </div>
               ))}
             </div>
           </div>
-          <div className="card" style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-            <h3 style={{ margin: 0 }}>¿Qué puedes hacer?</h3>
-            <ul style={{ margin: 0, paddingLeft: "1.1rem", color: "#cbd5f5", lineHeight: 1.7 }}>
-              <li>Subir audio y recibir subtítulos token a token vía SSE.</li>
-              <li>Grabar desde el navegador con monitor de volumen y reconexión automática.</li>
-              <li>Organizar tu biblioteca con etiquetas, estados y exportaciones a TXT/MD/SRT.</li>
-              <li>Compartir a herramientas externas como Notion o Trello.</li>
-            </ul>
+          <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+            <div className="card" style={{ marginTop: 0, display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+              <h3 style={{ margin: 0 }}>Así funciona</h3>
+              <ul style={{ margin: 0, paddingLeft: "1.25rem", color: "#cbd5f5", lineHeight: 1.65 }}>
+                <li>Sube audio y recibe subtítulos token a token vía SSE.</li>
+                <li>Graba desde el navegador con monitor de volumen y reconexión automática.</li>
+                <li>Organiza tu biblioteca con etiquetas, estados y exportaciones a TXT/MD/SRT.</li>
+                <li>Comparte a herramientas externas como Notion o Trello.</li>
+              </ul>
+            </div>
+            <div
+              className="card"
+              style={{
+                marginTop: 0,
+                background: "radial-gradient(circle at top left, rgba(59,130,246,0.35), rgba(14,116,144,0.3))",
+                border: "1px solid rgba(148,163,184,0.2)",
+                display: "flex",
+                flexDirection: "column",
+                gap: "1.5rem",
+                position: "relative",
+                overflow: "hidden",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                {[
+                  "#f87171",
+                  "#facc15",
+                  "#4ade80",
+                ].map((color) => (
+                  <span
+                    key={color}
+                    style={{
+                      width: "12px",
+                      height: "12px",
+                      borderRadius: "999px",
+                      background: color,
+                    }}
+                  />
+                ))}
+                <span style={{ marginLeft: "auto", color: "#e2e8f0", fontWeight: 600 }}>Sesión en vivo</span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(12, minmax(4px,1fr))", gap: "0.4rem", height: "120px" }}>
+                {Array.from({ length: 12 }).map((_, index) => (
+                  <span
+                    key={index}
+                    style={{
+                      display: "block",
+                      background: "linear-gradient(180deg, rgba(226,232,240,0.9), rgba(59,130,246,0.5))",
+                      borderRadius: "999px",
+                      transform: `scaleY(${index % 3 === 0 ? 1 : 0.4})`,
+                    }}
+                  />
+                ))}
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    borderRadius: "999px",
+                    padding: "0.5rem 1rem",
+                    background: "rgba(15,23,42,0.75)",
+                    border: "1px solid rgba(148,163,184,0.35)",
+                    color: "#f8fafc",
+                    fontWeight: 500,
+                    width: "fit-content",
+                  }}
+                >
+                  “Estoy llegando en 5 minutos”
+                </span>
+                <span style={{ color: "rgba(226,232,240,0.75)", fontSize: "0.9rem" }}>
+                  Deltas en vivo guardados en tu biblioteca
+                </span>
+              </div>
+            </div>
           </div>
         </section>
         <Routes>
