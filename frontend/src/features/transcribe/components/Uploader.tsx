@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { forwardRef, useCallback, useImperativeHandle, useMemo, useRef, useState } from "react";
 
 interface UploaderProps {
   onSelect: (file: File) => void;
@@ -6,7 +6,14 @@ interface UploaderProps {
   busy?: boolean;
 }
 
-export function Uploader({ onSelect, accept = "audio/*", busy = false }: UploaderProps) {
+export interface UploaderHandle {
+  open: () => void;
+}
+
+export const Uploader = forwardRef<UploaderHandle, UploaderProps>(function Uploader(
+  { onSelect, accept = "audio/*", busy = false }: UploaderProps,
+  ref,
+) {
   const [dragActive, setDragActive] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const borderColor = useMemo(() => (dragActive ? "#38bdf8" : "rgba(148,163,184,0.4)"), [dragActive]);
@@ -18,6 +25,18 @@ export function Uploader({ onSelect, accept = "audio/*", busy = false }: Uploade
       onSelect(file);
     },
     [onSelect],
+  );
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      open() {
+        if (!busy) {
+          inputRef.current?.click();
+        }
+      },
+    }),
+    [busy],
   );
 
   return (
@@ -72,13 +91,11 @@ export function Uploader({ onSelect, accept = "audio/*", busy = false }: Uploade
         disabled={busy}
         onClick={(event) => {
           event.preventDefault();
-          if (!busy) {
-            inputRef.current?.click();
-          }
+          inputRef.current?.click();
         }}
       >
         Explorar archivos
       </button>
     </label>
   );
-}
+});

@@ -48,8 +48,14 @@ def _update_job_meta(meta: dict) -> None:
     job = get_current_job()
     if job is None:
         return
+    job.meta.setdefault("progress", 0)
+    job.meta.setdefault("segment", 0)
     job.meta.update(meta)
-    job.save_meta()
+    job.meta["updated_at"] = datetime.utcnow().isoformat()
+    try:
+        job.save_meta()
+    except Exception:  # pragma: no cover - fallback queue has no persistence
+        pass
 
 
 def _select_quantization(default_quantization: str, quality_profile: Optional[str]) -> str:
@@ -101,20 +107,30 @@ def transcribe_job(
 
         def on_token(token: dict) -> None:
             transcript_parts.append(token["text"])
-            _update_job_meta({"last_token": json.dumps(token), "progress": len(transcript_parts)})
+            segment_index = int(token.get("segment", len(transcript_parts)))
+            _update_job_meta(
+                {
+                    "last_token": json.dumps(token),
+                    "progress": len(transcript_parts),
+                    "segment": segment_index,
+                }
+            )
 
         result = transcription_service.transcribe(audio_path, token_callback=on_token, language=language)
 
     transcript_key = f"{audio_key}.txt"
     storage_client.upload_transcript(result["text"], transcript_key)
 
-    _update_job_meta({
-        "status": "completed",
-        "transcript_key": transcript_key,
-        "segments": result["segments"],
-        "language": result["language"],
-        "duration": result.get("duration"),
-    })
+    _update_job_meta(
+        {
+            "status": "completed",
+            "transcript_key": transcript_key,
+            "segments": result["segments"],
+            "language": result["language"],
+            "duration": result.get("duration"),
+            "segment": len(result.get("segments", [])),
+        }
+    )
 
     with session_scope() as session:
         if job is not None:

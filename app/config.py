@@ -48,9 +48,13 @@ class Settings:
     api_description: str = (
         "Streaming transcription service with queue, storage, and metrics."
     )
+    app_name: str = "Grabadora"
 
     redis_url: str = "redis://redis:6379/0"
     rq_default_queue: str = "transcription"
+    rq_job_timeout: int = 1800
+    rq_result_ttl: int = 86400
+    rq_failure_ttl: int = 3600
 
     database_url: str = (
         "postgresql+psycopg2://postgres:postgres@db:5432/grabadora"
@@ -62,6 +66,44 @@ class Settings:
     s3_secret_key: str = "minioadmin"
     s3_bucket_audio: str = "audio"
     s3_bucket_transcripts: str = "transcripts"
+    s3_presigned_ttl: int = 86400
+
+    storage_dir: str = "storage"
+    transcripts_dir: str = "transcripts"
+    audio_cache_dir: str = "audio-cache"
+    models_cache_dir: str = "models"
+
+    max_upload_size_mb: int = 500
+    live_window_seconds: float = 5.0
+    live_window_overlap_seconds: float = 1.0
+    live_repeat_window_seconds: float = 2.0
+    live_repeat_max_duplicates: int = 3
+
+    huggingface_token: str | None = None
+    google_client_id: str | None = None
+    google_client_secret: str | None = None
+    google_redirect_uri: str | None = None
+
+    enable_dummy_transcriber: bool = False
+    whisper_model_size: str = "large-v2"
+    whisper_device: str = "cuda"
+    whisper_compute_type: str = "float16"
+    whisper_language: str | None = None
+    whisper_use_faster: bool = True
+    whisper_enable_speaker_diarization: bool = False
+    whisper_batch_size: int = 4
+    whisper_condition_on_previous_text: bool = True
+    whisper_word_timestamps: bool = True
+    whisper_vad_mode: str = "auto"
+    whisper_vad_repo_id: str = "pyannote/segmentation"
+    whisper_vad_filename: str = "pytorch_model.bin"
+    whisper_force_cuda: bool = False
+    whisper_compression_ratio_threshold: float = 2.4
+    whisper_log_prob_threshold: float = -1.0
+    whisper_final_beam: int = 1
+    whisper_live_beam: int = 1
+
+    debug_event_limit: int = 500
 
     jwt_secret_key: str = "super-secret"
     jwt_algorithm: str = "HS256"
@@ -80,6 +122,8 @@ class Settings:
             env_name = f"{self._env_prefix}{field.name.upper()}"
             raw_value = os.getenv(env_name)
             if raw_value is None:
+                raw_value = os.getenv(field.name.upper())
+            if raw_value is None:
                 continue
             try:
                 value = _coerce(raw_value, field.type)
@@ -94,3 +138,7 @@ def get_settings() -> Settings:
     """Return a cached ``Settings`` instance."""
 
     return Settings()
+
+
+# Backwards compatibility alias for code that expects a module-level ``settings``.
+settings = get_settings()

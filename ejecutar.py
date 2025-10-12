@@ -35,6 +35,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--host", default="0.0.0.0", help="Host de escucha para uvicorn.")
     parser.add_argument("--port", type=int, default=8000, help="Puerto de escucha para uvicorn.")
+    parser.add_argument(
+        "--reload",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Recarga automática en desarrollo (usa --no-reload para desactivarla).",
+    )
     return parser.parse_args()
 
 
@@ -46,7 +52,12 @@ def main() -> None:
             raise SystemExit(
                 "Corrige las dependencias anteriores o vuelve a ejecutar con --skip-checks si entiendes los riesgos."
             )
-    uvicorn.run("app.main:app", host=args.host, port=args.port, reload=True)
+    base_url = f"http://{args.host}:{args.port}"
+    print("\nℹ️  Endpoints disponibles:")
+    print(f"   • SPA: {base_url}/")
+    print(f"   • API interactiva: {base_url}/docs")
+    print(f"   • Métricas Prometheus: {base_url}/metrics")
+    uvicorn.run("app.main:app", host=args.host, port=args.port, reload=args.reload)
 
 
 if __name__ == "__main__":

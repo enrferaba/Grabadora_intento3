@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import argparse
+import importlib.util
 import shutil
 import subprocess
 import sys
@@ -49,6 +51,7 @@ PYTHON_REQUIREMENTS = {
     "prometheus_client": "prometheus-client",
     "structlog": "structlog",
     "jose": "python-jose[cryptography]",
+    "multipart": "python-multipart",
 }
 
 

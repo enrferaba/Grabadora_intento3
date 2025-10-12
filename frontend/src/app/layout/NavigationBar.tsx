@@ -17,7 +17,6 @@ export function NavigationBar({ onCloseMenu }: NavigationBarProps) {
       { to: "/transcribir", label: "Transcribir" },
       { to: "/grabar", label: "Grabar" },
       { to: "/biblioteca", label: "Biblioteca" },
-      { to: "/cuenta", label: "Cuenta" },
     ],
     [],
   );
