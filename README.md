@@ -1,6 +1,6 @@
 # Grabadora
 
-Grabadora es una plataforma de transcripción en streaming que combina FastAPI, faster-whisper y trabajadores GPU en cola para entregar tokens incrementales en tiempo real. Esta revisión incluye una limpieza completa de los artefactos heredados, documentación actualizada y comprobaciones automáticas para asegurar que cada subsistema funcione como se espera.
+Grabadora es una plataforma de transcripción en streaming que combina FastAPI, faster-whisper y trabajadores GPU en cola para entregar tokens incrementales en tiempo real. Esta revisión pone especial atención en que la experiencia sea consistente: frontend renovado, documentación guiada y pruebas que validan cada subsistema incluso en entornos minimizados.
 
 ## Arquitectura
 
@@ -16,13 +16,13 @@ Grabadora es una plataforma de transcripción en streaming que combina FastAPI, 
 
 ## Qué se corrigió y mejoró en esta revisión
 
-- Se normalizó el flujo SSE para enviar estructuras nativas (`event`, `data`) en lugar de cadenas JSON arbitrarias, evitando parsing innecesario en los clientes.
-- Se ajustaron las pruebas de streaming para reflejar el nuevo contrato y prevenir falsos positivos.
-- Se reorganizó la documentación principal, eliminando restos de proyectos previos y detallando cada componente desplegado.
-- Se documentó claramente la configuración mínima y los pasos de ejecución en nuevos archivos (`README.md`, `ejecutar.md`).
-- Se añadió una landing estática en `frontend/index.html` servida desde `/` para verificar que la web responde correctamente incluso sin el stack completo.
-- Se sustituyeron dependencias críticas (Pydantic, python-jose, boto3) por implementaciones ligeras que degradan con gracia cuando las librerías no están disponibles, permitiendo ejecutar las pruebas en entornos restringidos.
-- Se añadió un parche de compatibilidad con Python 3.12 para Pydantic v1 y se renombró el paquete `queue/` a `taskqueue/` para evitar choques con la librería estándar.
+- Flujo SSE consistente: eventos `delta`, `completed` y `error` se emiten con claves nativas evitando conversiones manuales del lado cliente.
+- Pruebas alineadas al contrato de streaming para evitar falsos positivos.
+- Documentación reorganizada eliminando restos de proyectos previos y detallando cada componente desplegado.
+- Ruta de arranque documentada en `README.md` y `ejecutar.md` con foco en un único comando listo para producción.
+- Landing web modernizada en `frontend/index.html` con instrucciones paso a paso y copy actualizado en `docs/marketing/landing.md`.
+- Sustitución de dependencias críticas (Pydantic, python-jose, boto3) por degradaciones elegantes que mantienen las pruebas operativas en entornos restringidos.
+- Parche de compatibilidad con Python 3.12 para Pydantic v1 y renombrado del paquete `queue/` a `taskqueue/` para evitar choques con la librería estándar.
 
 ## Requisitos previos
 
@@ -64,13 +64,20 @@ Para aislar dependencias (Redis, PostgreSQL, MinIO, Prometheus) y evitar discrep
 2. Ejecuta `docker compose up --build`.
 3. El compose incluye servicios para API, worker, Redis, PostgreSQL, MinIO, Prometheus y Grafana.
 
+### Recorrido por la experiencia web
+
+- **Landing renovada**: abre `http://localhost:8000/` para acceder a la nueva página principal. Desde ahí encontrarás accesos directos a `/docs`, a la consola de MinIO y un tutorial rápido.
+- **Documentación interactiva**: `http://localhost:8000/docs` para Swagger UI y `http://localhost:8000/redoc` como alternativa de lectura.
+- **Paneles de observabilidad**: Prometheus (`http://localhost:9090/`) y Grafana (`http://localhost:3000/`) quedan disponibles automáticamente con Docker Compose.
+- **Almacenamiento**: MinIO Console responde en `http://localhost:9001/` y desde la landing enlazamos directamente para que revises tus transcripciones almacenadas.
+
 ### Acceso a la interfaz web y paneles
 
-- **Landing web**: abre `http://localhost:8000/` (sirve `frontend/index.html`).
+- **Landing web**: `http://localhost:8000/` muestra la nueva experiencia con pasos claros, snippets reutilizables y llamadas a la acción.
 - **Documentación interactiva**: `http://localhost:8000/docs` (Swagger UI) o `http://localhost:8000/redoc`.
 - **Prometheus**: disponible en `http://localhost:9090/` cuando usas Docker Compose.
 - **Grafana**: visita `http://localhost:3000/` y añade Prometheus como fuente con la URL `http://prometheus:9090`.
-- **MinIO Console**: `http://localhost:9001/` para inspeccionar buckets de audio y transcripts.
+- **MinIO Console**: `http://localhost:9001/` para inspeccionar buckets de audio y transcripts (enlace directo también en la landing).
 
 ## Uso de la API
 

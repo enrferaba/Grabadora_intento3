@@ -1,19 +1,19 @@
 # Grabadora Landing Page Copy
 
 ## Headline
-"Transcribe every word, as it happens."
+"Transcribe y comparte sin fricción desde el primer minuto."
 
 ## Subheading
-Stream real-time transcripts to your collaborators while GPU workers handle the heavy lifting.
+GPU workers procesan tu audio, Redis coordina los avances y tú recibes texto legible al instante.
 
 ## Call-to-Action
-- Primary: **Start Streaming**
-- Secondary: **Book a Demo**
+- Primary: **Explorar la API interactiva**
+- Secondary: **Abrir consola de MinIO**
 
 ## Feature Highlights
-1. Live SSE streaming with accurate token-level updates.
-2. Secure storage powered by your S3 or MinIO account.
-3. Team dashboards that track usage, spend, and project health.
+1. Streaming SSE granular con eventos `delta`, `completed` y `error` documentados.
+2. Persistencia segura en S3/MinIO con claves únicas por usuario y proyecto.
+3. Observabilidad lista: dashboards de Grafana y métricas Prometheus preconfiguradas.
 
 ## Social Proof
-> "Grabadora let us publish episode recaps before the recording ended." – Beta Podcasters
+> "Compartimos resúmenes durante la reunión, no después. Grabadora mantiene a nuestro equipo sincronizado y documentado." – Product Ops, Startups SaaS

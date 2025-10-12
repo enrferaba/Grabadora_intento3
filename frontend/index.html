@@ -2,139 +2,472 @@
 <html lang="es">
   <head>
     <meta charset="utf-8" />
-    <title>Grabadora · Transcripción en tiempo real</title>
+    <title>Grabadora · Transcribe, comparte y monitorea en minutos</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap"
+    />
     <style>
       :root {
-        color-scheme: light dark;
+        color-scheme: dark light;
+        --surface: rgba(9, 16, 32, 0.75);
+        --surface-strong: rgba(9, 16, 32, 0.92);
+        --primary: #ff9f1c;
+        --primary-strong: #ff8500;
+        --accent: #2ec4b6;
+        --text: #f8f9ff;
+        --muted: rgba(248, 249, 255, 0.7);
+        --shadow: 0 25px 60px rgba(5, 10, 25, 0.45);
+        --border: rgba(255, 255, 255, 0.08);
+      }
+      * {
+        box-sizing: border-box;
       }
       body {
-        font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
         margin: 0;
-        background: radial-gradient(circle at top left, #003049, #1d3557);
-        color: #f1faee;
         min-height: 100vh;
+        font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+        color: var(--text);
+        background: radial-gradient(circle at top left, #14213d 0%, #0b132b 40%, #02040f 100%);
+        background-attachment: fixed;
+        display: flex;
+        flex-direction: column;
+      }
+      .noise {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="5" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(%23n)" opacity="0.12"/></svg>');
+        mix-blend-mode: screen;
+        z-index: 0;
+      }
+      main {
+        position: relative;
+        z-index: 1;
+        width: min(960px, 92vw);
+        margin: 0 auto 96px;
+        padding: 48px 0 64px;
+      }
+      header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 32px 0 12px;
+      }
+      nav {
+        display: flex;
+        gap: 20px;
+        align-items: center;
+      }
+      .brand {
         display: flex;
         align-items: center;
-        justify-content: center;
-      }
-      .card {
-        background: rgba(16, 22, 35, 0.8);
-        border-radius: 18px;
-        padding: 48px 40px;
-        max-width: 720px;
-        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
-      }
-      h1 {
-        font-size: 2.6rem;
-        margin-bottom: 12px;
-      }
-      p {
-        font-size: 1.05rem;
-        line-height: 1.7;
-        margin-bottom: 24px;
-      }
-      .cta {
-        display: inline-flex;
-        align-items: center;
-        gap: 10px;
-        background: #ff6b6b;
-        color: #1d3557;
-        font-weight: 600;
-        padding: 12px 20px;
-        border-radius: 999px;
+        gap: 12px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
         text-decoration: none;
-        transition: transform 0.2s ease, box-shadow 0.2s ease;
-        box-shadow: 0 14px 30px rgba(255, 107, 107, 0.35);
+        color: var(--text);
       }
-      .cta:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 18px 36px rgba(255, 107, 107, 0.4);
+      .brand svg {
+        width: 34px;
+        height: 34px;
       }
-      .cta.secondary {
-        background: transparent;
-        color: #f1faee;
-        border: 1px solid rgba(241, 250, 238, 0.6);
-        box-shadow: none;
+      nav a {
+        font-size: 0.95rem;
+        color: var(--muted);
+        text-decoration: none;
+        transition: color 0.2s ease;
       }
-      .cta.secondary:hover {
-        background: rgba(241, 250, 238, 0.1);
-        box-shadow: none;
+      nav a:hover {
+        color: var(--text);
       }
-      .actions {
+      .hero {
+        margin-top: 32px;
+        padding: 48px;
+        background: var(--surface);
+        border-radius: 28px;
+        border: 1px solid var(--border);
+        box-shadow: var(--shadow);
+        position: relative;
+        overflow: hidden;
+      }
+      .hero::after {
+        content: "";
+        position: absolute;
+        inset: auto -60px -120px auto;
+        width: 320px;
+        height: 320px;
+        background: radial-gradient(circle, rgba(46, 196, 182, 0.35) 0%, rgba(46, 196, 182, 0) 70%);
+        transform: rotate(25deg);
+        pointer-events: none;
+      }
+      .hero h1 {
+        font-size: clamp(2.4rem, 5vw, 3.4rem);
+        margin-bottom: 18px;
+        line-height: 1.1;
+      }
+      .hero p {
+        max-width: 600px;
+        font-size: 1.15rem;
+        line-height: 1.7;
+        color: var(--muted);
+      }
+      .hero-actions {
+        margin-top: 32px;
         display: flex;
         flex-wrap: wrap;
-        gap: 12px;
-        margin-top: 20px;
+        gap: 14px;
       }
-      .instructions,
-      .features {
-        margin-top: 32px;
-        background: rgba(6, 12, 24, 0.55);
-        border-radius: 12px;
-        padding: 20px 24px;
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        border-radius: 999px;
+        padding: 14px 24px;
+        font-weight: 600;
+        letter-spacing: 0.01em;
+        text-decoration: none;
+        border: 1px solid transparent;
+        transition: transform 0.2s ease, box-shadow 0.2s ease, border 0.2s ease;
       }
-      .instructions h2,
-      .features h2 {
-        margin-top: 0;
-        font-size: 1.3rem;
+      .button.primary {
+        background: var(--primary);
+        color: #201a02;
+        box-shadow: 0 18px 38px rgba(255, 159, 28, 0.35);
       }
-      ol,
-      ul {
-        margin: 0;
-        padding-left: 20px;
+      .button.primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 26px 48px rgba(255, 159, 28, 0.45);
+      }
+      .button.secondary {
+        background: transparent;
+        border-color: var(--border);
+        color: var(--text);
+      }
+      .button.secondary:hover {
+        border-color: rgba(255, 255, 255, 0.35);
+        transform: translateY(-2px);
+      }
+      section {
+        margin-top: 64px;
+      }
+      h2 {
+        font-size: 1.8rem;
+        margin-bottom: 20px;
+      }
+      .grid {
         display: grid;
-        gap: 8px;
+        gap: 20px;
       }
-      code {
-        background: rgba(241, 250, 238, 0.1);
-        padding: 2px 6px;
-        border-radius: 6px;
-        font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-        font-size: 0.85rem;
+      .features {
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      }
+      .card {
+        background: var(--surface);
+        border-radius: 20px;
+        border: 1px solid var(--border);
+        padding: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        box-shadow: var(--shadow);
+      }
+      .card svg {
+        width: 28px;
+        height: 28px;
+        color: var(--accent);
+      }
+      .card p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.6;
+      }
+      .steps {
+        counter-reset: step;
+        display: grid;
+        gap: 18px;
+      }
+      .step {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 18px;
+        align-items: start;
+        padding: 22px;
+        border-radius: 18px;
+        border: 1px solid var(--border);
+        background: var(--surface-strong);
+      }
+      .step::before {
+        counter-increment: step;
+        content: counter(step);
+        width: 42px;
+        height: 42px;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        background: rgba(255, 159, 28, 0.16);
+        color: var(--primary);
+        font-weight: 600;
+      }
+      .step p {
+        color: var(--muted);
+        margin: 8px 0 0;
+      }
+      .code-block {
+        font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+        font-size: 0.9rem;
+        background: rgba(8, 16, 36, 0.85);
+        border-radius: 16px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        padding: 20px;
+        overflow-x: auto;
+        line-height: 1.6;
+      }
+      .testimonials {
+        display: grid;
+        gap: 18px;
+      }
+      blockquote {
+        margin: 0;
+        padding: 24px;
+        background: rgba(23, 32, 57, 0.9);
+        border-radius: 18px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        font-size: 1.05rem;
+        line-height: 1.7;
+      }
+      blockquote footer {
+        margin-top: 18px;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+      .cta-banner {
+        margin-top: 80px;
+        padding: 36px;
+        border-radius: 24px;
+        background: linear-gradient(135deg, rgba(255, 133, 0, 0.92), rgba(46, 196, 182, 0.92));
+        color: #0b132b;
+        text-align: center;
+        display: grid;
+        gap: 16px;
+        box-shadow: 0 30px 60px rgba(255, 159, 28, 0.28);
+      }
+      .cta-banner h3 {
+        font-size: clamp(1.8rem, 4vw, 2.4rem);
+        margin: 0;
+      }
+      .cta-banner p {
+        margin: 0;
+        font-size: 1.05rem;
+      }
+      .cta-banner a {
+        justify-self: center;
       }
       footer {
-        margin-top: 32px;
+        margin-top: 72px;
+        text-align: center;
+        color: var(--muted);
         font-size: 0.85rem;
-        opacity: 0.75;
+      }
+      footer a {
+        color: var(--text);
+      }
+      @media (max-width: 720px) {
+        header {
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 18px;
+        }
+        .hero {
+          padding: 36px 26px;
+        }
+        .hero-actions {
+          flex-direction: column;
+          align-items: stretch;
+        }
+        nav {
+          flex-wrap: wrap;
+        }
       }
     </style>
   </head>
   <body>
-    <main class="card">
+    <div class="noise" aria-hidden="true"></div>
+    <main>
       <header>
-        <h1>Grabadora</h1>
-        <p>
-          Plataforma unificada para transcripciones en tiempo real con colas Redis, almacenamiento S3 y métricas listas para
-          producción. Recibe deltas de texto al instante mientras la IA procesa tu audio.
-        </p>
-        <div class="actions">
-          <a class="cta" href="/docs" rel="noopener">Abrir API Docs</a>
-          <a class="cta secondary" href="/redoc" rel="noopener">Vista Redoc</a>
-        </div>
+        <a class="brand" href="#inicio">
+          <svg viewBox="0 0 64 64" role="img" aria-hidden="true" focusable="false">
+            <defs>
+              <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#ff9f1c" />
+                <stop offset="100%" stop-color="#2ec4b6" />
+              </linearGradient>
+            </defs>
+            <rect x="4" y="4" width="56" height="56" rx="14" fill="url(#grad)" />
+            <path
+              d="M24 20h4a8 8 0 0 1 8 8v0a8 8 0 0 1-8 8h-4zm12 0h4a8 8 0 0 1 8 8v0a8 8 0 0 1-8 8h-4z"
+              fill="#0b132b"
+              opacity="0.88"
+            />
+          </svg>
+          Grabadora
+        </a>
+        <nav aria-label="Navegación principal">
+          <a href="#caracteristicas">Características</a>
+          <a href="#pasos">Cómo funciona</a>
+          <a href="#demo">Probar ahora</a>
+          <a href="/docs">API Docs</a>
+        </nav>
       </header>
 
-      <section class="instructions">
-        <h2>Cómo verla en acción</h2>
-        <ol>
-          <li>Levanta la plataforma con <code>docker compose up --build</code>.</li>
-          <li>Abre <code>http://localhost:8000/</code> para esta landing y <code>/docs</code> para la API interactiva.</li>
-          <li>Crea un usuario, solicita un token y sube audio en <strong>/transcribe</strong> para seguir el SSE en <strong>/transcribe/&lt;job_id&gt;</strong>.</li>
-        </ol>
+      <article class="hero" id="inicio">
+        <h1>Transcribe y comparte sin fricción desde el primer minuto.</h1>
+        <p>
+          Grabadora convierte tus sesiones de audio en texto accionable en segundos. GPU workers procesan el audio, Redis coordina
+          los avances y tú recibes deltas legibles al instante mientras guardamos cada resultado en tu almacenamiento S3.
+        </p>
+        <div class="hero-actions">
+          <a class="button primary" href="/docs">Explorar la API interactiva</a>
+          <a class="button secondary" href="http://localhost:9001" target="_blank" rel="noopener">Abrir consola de MinIO</a>
+        </div>
+      </article>
+
+      <section id="caracteristicas">
+        <h2>Diseñada para equipos que necesitan claridad inmediata</h2>
+        <div class="grid features">
+          <div class="card">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path
+                d="M4 4h6v6H4zm0 10h6v6H4zm10-10h6v6h-6zm0 10h6v6h-6z"
+              />
+            </svg>
+            <h3>Streaming granular</h3>
+            <p>
+              Recibe eventos <strong>delta</strong> cada vez que el modelo detecta nuevas palabras. Sin pooling ni esperas
+              innecesarias.
+            </p>
+          </div>
+          <div class="card">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path
+                d="M12 3l9.5 7h-3.5v11h-12v-11h-3.5z"
+              />
+            </svg>
+            <h3>Persistencia segura</h3>
+            <p>
+              Guardamos audio y transcripciones en MinIO/S3 con nombres únicos por usuario, listos para auditar o compartir.
+            </p>
+          </div>
+          <div class="card">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path
+                d="M5 3l14 9-14 9V3zm3.5 4.87v8.26L13.85 12 8.5 7.87z"
+              />
+            </svg>
+            <h3>Paneles accionables</h3>
+            <p>
+              Prometheus y Grafana ya configurados para visualizar latencia, carga de GPU, longitud de cola y errores críticos.
+            </p>
+          </div>
+          <div class="card">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path
+                d="M12 3a9 9 0 0 0-9 9h2a7 7 0 0 1 14 0h2a9 9 0 0 0-9-9zm-7 9a7 7 0 0 0 7 7v2a9 9 0 0 1-9-9h2zm7 7a7 7 0 0 0 7-7h2a9 9 0 0 1-9 9v-2z"
+              />
+            </svg>
+            <h3>Cuenta multi-perfil</h3>
+            <p>
+              Crea espacios independientes para cada proyecto con límites y métricas personalizadas sin duplicar usuarios.
+            </p>
+          </div>
+        </div>
       </section>
 
-      <section class="features">
-        <h2>Qué incluye</h2>
-        <ul>
-          <li>Streaming SSE de tokens delta impulsado por faster-whisper con cuantización configurable.</li>
-          <li>Colas RQ sobre Redis con persistencia en MinIO/S3 de audios y transcripciones.</li>
-          <li>Métricas Prometheus y dashboards listos para Grafana en <code>deploy/grafana/</code>.</li>
-        </ul>
+      <section id="pasos">
+        <h2>Puesta en marcha en cuatro pasos</h2>
+        <div class="steps">
+          <div class="step">
+            <div>
+              <h3>Configura variables</h3>
+              <p>Duplica <code>.env.example</code>, completa tus credenciales S3/JWT y define la cuantización preferida.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div>
+              <h3>Levanta el stack</h3>
+              <p>
+                Ejecuta <code>docker compose up --build</code> desde la raíz. El orquestador deja API, worker, Redis, DB, MinIO y dashboards listos.
+              </p>
+            </div>
+          </div>
+          <div class="step">
+            <div>
+              <h3>Explora y prueba</h3>
+              <p>
+                Ingresa a <a href="http://localhost:8000/docs">/docs</a>, crea un usuario, solicita token y sube audio en
+                <strong>/transcribe</strong>.
+              </p>
+            </div>
+          </div>
+          <div class="step">
+            <div>
+              <h3>Sigue el stream</h3>
+              <p>
+                Conéctate a <code>/transcribe/{"{job_id}"}</code> mediante SSE para recibir progresos en vivo y recuperar el transcript final.
+              </p>
+            </div>
+          </div>
+        </div>
       </section>
+
+      <section id="demo">
+        <h2>¿Prefieres copiar y pegar?</h2>
+        <div class="card" style="gap: 22px;">
+          <p>Ejemplo rápido con <strong>HTTPX</strong> para crear un trabajo y escuchar el stream en CLI:</p>
+          <pre class="code-block"><code>import httpx, sseclient
+
+auth = httpx.post(
+    "http://localhost:8000/auth/token",
+    data={"username": "demo@grabadora.ai", "password": "demo"},
+).json()
+
+headers = {"Authorization": f"Bearer {auth['access_token']}"}
+files = {"file": open("audio.wav", "rb")}
+
+job = httpx.post("http://localhost:8000/transcribe", headers=headers, files=files).json()
+
+for event in sseclient.SSEClient(f"http://localhost:8000/transcribe/{job['job_id']}", headers=headers):
+    print(event.event, event.data)
+</code></pre>
+        </div>
+      </section>
+
+      <section>
+        <h2>Equipos que ya transcriben con confianza</h2>
+        <div class="testimonials">
+          <blockquote>
+            “Compartimos resúmenes durante la reunión, no después. Grabadora mantiene a nuestro equipo sincronizado y documentado.”
+            <footer>Product Ops · Startups SaaS</footer>
+          </blockquote>
+          <blockquote>
+            “La integración con nuestros buckets privados fue inmediata y los dashboards mostraron valor en el primer día.”
+            <footer>Lead Data Engineer · MediaLab</footer>
+          </blockquote>
+        </div>
+      </section>
+
+      <div class="cta-banner">
+        <h3>¿Listo para escuchar a tu organización en tiempo real?</h3>
+        <p>Lanza Grabadora hoy mismo y ofrece transcripciones confiables a tus clientes y colaboradores.</p>
+        <a class="button primary" href="/docs">Crear tu primer job</a>
+      </div>
 
       <footer>
-        Consulta <code>README.md</code> y <code>docs/</code> para la guía completa de despliegue, monitoreo y branding.
+        Hecho con cariño por el equipo de Grabadora · Consulta el <a href="/docs">Swagger</a>, la <a href="/redoc">Redoc</a> o el repositorio para más detalles.
       </footer>
     </main>
   </body>
