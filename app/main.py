@@ -5,7 +5,8 @@ import asyncio
 import json
 import logging
 import uuid
-from datetime import datetime
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, AsyncGenerator, Dict, List, Optional
 
@@ -143,12 +144,17 @@ from app.auth import AuthenticatedUser, get_current_user
 from app.config import get_settings
 from app.database import session_scope
 from app.schemas import (
+    AppConfigResponse,
+    ProfilesResponse,
+    QualityProfileSchema,
     TranscriptDetail,
     TranscriptExportRequest,
     TranscriptResponse,
     TranscriptSummary,
+    TranscriptUpdateRequest,
     UserCreate,
     UserRead,
+    ProfileRead,
 )
 try:  # pragma: no cover - optional dependency
     from models.user import Profile, Transcript, User
@@ -170,10 +176,11 @@ except ImportError:  # pragma: no cover
             self.quality_profile: str | None = None
             self.title: str | None = None
             self.tags: str | None = None
+            self.notes: str | None = None
             self.duration_seconds: float | None = None
             self.segments: str | None = None
-            self.created_at = datetime.utcnow()
-            self.updated_at = datetime.utcnow()
+            self.created_at = datetime.now(UTC)
+            self.updated_at = datetime.now(UTC)
             self.completed_at: datetime | None = None
             self.profile_id: int | None = None
 
@@ -247,16 +254,24 @@ QUALITY_PROFILES = {
     "fast": {
         "label": "Rápido (int8)",
         "description": "Máxima velocidad, ideal para notas rápidas",
+        "latency_hint_ms": 60000,
+        "cost_factor": 0.25,
     },
     "balanced": {
         "label": "Equilibrado (float16)",
         "description": "Buen balance entre precisión y coste",
+        "latency_hint_ms": 120000,
+        "cost_factor": 1.0,
     },
     "precise": {
         "label": "Preciso (float32)",
         "description": "Máxima fidelidad para grabaciones críticas",
+        "latency_hint_ms": 180000,
+        "cost_factor": 1.75,
     },
 }
+
+SPA_ROUTE_HINTS = ["/", "/transcribir", "/grabar", "/biblioteca", "/cuenta"]
 
 try:  # pragma: no cover - optional dependency
     import structlog
@@ -298,7 +313,31 @@ logger = structlog.get_logger(__name__)
 
 app: FastAPIApp | None = None  # type: ignore[misc]
 if FastAPI is not None:
-    app = FastAPI(title=settings.api_title, version=settings.api_version, description=settings.api_description)
+
+    @asynccontextmanager
+    async def _lifespan(app_obj: FastAPIApp) -> AsyncGenerator[None, None]:
+        storage = S3StorageClient()
+        storage_ready = True
+        try:
+            storage.ensure_buckets()
+            logger.info("Storage buckets verified on startup")
+        except Exception as exc:  # pragma: no cover - defensive startup guard
+            storage_ready = False
+            logger.warning(
+                "Storage buckets could not be verified on startup", extra={"error": repr(exc)}
+            )
+        setattr(app_obj.state, "storage_ready", storage_ready)
+        try:
+            yield
+        finally:
+            setattr(app_obj.state, "storage_ready", False)
+
+    app = FastAPI(
+        title=settings.api_title,
+        version=settings.api_version,
+        description=settings.api_description,
+        lifespan=_lifespan,
+    )
     allow_origins: List[str] = []
     frontend_origin = getattr(settings, "frontend_origin", None)
     if frontend_origin:
@@ -313,7 +352,20 @@ if FastAPI is not None:
             allow_methods=["*"],
             allow_headers=["*"],
         )
-    Instrumentator(namespace=settings.prometheus_namespace).instrument(app).expose(app)
+    metrics_enabled = False
+    instrumentator_module = getattr(Instrumentator, "__module__", "")
+    if "prometheus_fastapi_instrumentator" in instrumentator_module:
+        try:
+            Instrumentator(namespace=settings.prometheus_namespace).instrument(app).expose(app)
+            metrics_enabled = True
+        except Exception as exc:  # pragma: no cover - defensive guard
+            logger.warning(
+                "Prometheus instrumentation could not be initialised",
+                extra={"error": repr(exc)},
+            )
+    else:
+        logger.info("Prometheus instrumentation not available; skipping /metrics endpoint")
+    setattr(app.state, "metrics_enabled", metrics_enabled)
 
 API_ERRORS = Counter("api_errors_total", "Total API errors", namespace=settings.prometheus_namespace)
 QUEUE_LENGTH = Gauge("queue_length", "Number of queued transcription jobs", namespace=settings.prometheus_namespace)
@@ -366,6 +418,7 @@ def _transcript_to_summary(transcript: Transcript) -> TranscriptSummary:
         completed_at=getattr(transcript, "completed_at", None),
         duration_seconds=duration_float,
         tags=tags,
+        notes=getattr(transcript, "notes", None),
     )
 
 
@@ -533,11 +586,6 @@ if app is not None:
         logger.exception("Unhandled exception", exc_info=exc)
         return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
 
-    @app.on_event("startup")
-    async def startup_event() -> None:
-        storage = S3StorageClient()
-        storage.ensure_buckets()
-
     @app.post("/auth/token")
     async def login(form_data: auth.OAuth2PasswordRequestForm = Depends()) -> dict:  # type: ignore[assignment]
         return auth.login(form_data)
@@ -582,7 +630,7 @@ if app is not None:
         storage.upload_audio(file.file, audio_key)
 
         primary_profile_id = user.profiles[0].id if getattr(user, "profiles", []) else None
-        enqueued_at = datetime.utcnow().isoformat()
+        enqueued_at = datetime.now(UTC).isoformat()
         job = queue.enqueue(  # type: ignore[call-arg]
             tasks.transcribe_job,
             audio_key,
@@ -754,6 +802,89 @@ if app is not None:
                 raise HTTPException(status_code=404, detail="Transcript not found")
         return _transcript_to_detail(transcript)
 
+    @app.patch("/transcripts/{transcript_id}", response_model=TranscriptDetail)
+    async def update_transcript_metadata(
+        transcript_id: int,
+        payload: TranscriptUpdateRequest,
+        user: AuthenticatedUser = Depends(get_current_user),
+    ) -> TranscriptDetail:
+        if not any(
+            value is not None
+            for value in (payload.title, payload.tags, payload.notes, payload.quality_profile)
+        ):
+            raise HTTPException(status_code=400, detail="No fields provided")
+        if payload.quality_profile and payload.quality_profile not in QUALITY_PROFILES:
+            raise HTTPException(status_code=400, detail="Invalid quality profile")
+
+        with session_scope() as session:
+            transcript = (
+                session.query(Transcript)
+                .filter(Transcript.id == transcript_id, Transcript.user_id == user.id)
+                .one_or_none()
+            )
+            if transcript is None:
+                raise HTTPException(status_code=404, detail="Transcript not found")
+
+            if payload.title is not None:
+                new_title = payload.title.strip()
+                transcript.title = new_title or None
+            if payload.tags is not None:
+                tags_payload = payload.tags
+                if isinstance(tags_payload, str):
+                    tags_list = _split_tags(tags_payload)
+                else:
+                    tags_list = [item.strip() for item in tags_payload if str(item).strip()]
+                transcript.tags = _join_tags(tags_list)
+            if payload.notes is not None:
+                notes_value = payload.notes.strip()
+                transcript.notes = notes_value or None
+            if payload.quality_profile is not None:
+                transcript.quality_profile = payload.quality_profile
+
+            transcript.updated_at = datetime.now(UTC)
+            session.add(transcript)
+            session.commit()
+            session.refresh(transcript)
+
+        return _transcript_to_detail(transcript)
+
+    @app.delete("/transcripts/{transcript_id}", status_code=204, response_class=Response)
+    async def delete_transcript(
+        transcript_id: int, user: AuthenticatedUser = Depends(get_current_user)
+    ) -> Response:
+        with session_scope() as session:
+            transcript = (
+                session.query(Transcript)
+                .filter(Transcript.id == transcript_id, Transcript.user_id == user.id)
+                .one_or_none()
+            )
+            if transcript is None:
+                raise HTTPException(status_code=404, detail="Transcript not found")
+
+            audio_key = transcript.audio_key
+            transcript_key = getattr(transcript, "transcript_key", None)
+            session.delete(transcript)
+            session.commit()
+
+        storage = S3StorageClient()
+        if audio_key:
+            try:
+                storage.delete_audio(audio_key)
+            except Exception:  # pragma: no cover - clean up best effort
+                logger.warning("Failed to delete audio asset", extra={"audio_key": audio_key})
+        if transcript_key:
+            try:
+                storage.delete_transcript(transcript_key)
+            except Exception:  # pragma: no cover - clean up best effort
+                logger.warning(
+                    "Failed to delete transcript asset", extra={"transcript_key": transcript_key}
+                )
+        logger.info(
+            "Deleted transcript",
+            extra={"transcript_id": transcript_id, "audio_key": audio_key, "transcript_key": transcript_key},
+        )
+        return Response(status_code=204)
+
     def _segments_to_srt(segments: List[dict]) -> str:
         lines: List[str] = []
         for idx, segment in enumerate(segments, start=1):
@@ -825,22 +956,76 @@ if app is not None:
     @app.get("/healthz")
     async def healthcheck() -> JSONResponseType:
         _sample_gpu_usage()
-        return JSONResponse({"status": "ok", "time": datetime.utcnow().isoformat()})
+        return JSONResponse({"status": "ok", "time": datetime.now(UTC).isoformat()})
+
+    @app.get("/profiles", response_model=ProfilesResponse)
+    async def get_profiles(
+        user: AuthenticatedUser = Depends(get_current_user),
+    ) -> ProfilesResponse:
+        with session_scope() as session:
+            db_profiles = (
+                session.query(Profile)
+                .filter(Profile.user_id == user.id)
+                .order_by(Profile.created_at.asc())
+                .all()
+            )
+        quality_profiles = [
+            QualityProfileSchema(
+                id=profile_id,
+                label=payload["label"],
+                description=payload.get("description"),
+                latency_hint_ms=payload.get("latency_hint_ms"),
+                cost_factor=float(payload["cost_factor"]) if payload.get("cost_factor") is not None else None,
+            )
+            for profile_id, payload in QUALITY_PROFILES.items()
+        ]
+        account_profiles = [ProfileRead.model_validate(item) for item in db_profiles]
+        return ProfilesResponse(
+            quality_profiles=quality_profiles,
+            account_profiles=account_profiles,
+        )
+
+    @app.get("/config", response_model=AppConfigResponse)
+    async def get_config() -> AppConfigResponse:
+        storage = S3StorageClient()
+        storage_mode = "local" if getattr(storage, "_local_mode", False) else "remote"
+        metrics_enabled = False
+        if app is not None:
+            metrics_enabled = bool(getattr(app.state, "metrics_enabled", False))
+        features = {
+            "storage": {"mode": storage_mode},
+            "sse": {"ping_interval": 10.0, "retry_ms": 5000},
+            "queue": {"backend": getattr(settings, "queue_backend", "auto")},
+        }
+        storage_ready = False
+        if app is not None:
+            storage_ready = bool(getattr(app.state, "storage_ready", False))
+        return AppConfigResponse(
+            app_name=settings.app_name,
+            max_upload_size_mb=getattr(settings, "max_upload_size_mb", 0),
+            queue_backend=getattr(settings, "queue_backend", "auto"),
+            sse_ping_interval=10.0,
+            sse_retry_delay_ms=5000,
+            metrics_enabled=metrics_enabled,
+            spa_routes=SPA_ROUTE_HINTS,
+            storage_ready=storage_ready,
+            features=features,
+        )
+
+    @app.get("/", response_class=HTMLResponse, include_in_schema=False)
+    async def root() -> HTMLResponseType:
+        return _spa_index()
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def spa_router(full_path: str) -> ResponseType:
+        candidate = FRONTEND_DIST / full_path
+        if full_path and candidate.exists() and candidate.is_file():
+            if isinstance(FileResponse, type):
+                return FileResponse(candidate)
+            return HTMLResponse(candidate.read_text(encoding="utf-8"))
+        return _spa_index()
 
     if SPA_MOUNTED:
-        @app.get("/", response_class=HTMLResponse)
-        async def root() -> HTMLResponseType:
-            return _spa_index()
-
-        @app.get("/{full_path:path}")
-        async def spa_router(full_path: str) -> ResponseType:
-            candidate = FRONTEND_DIST / full_path
-            if full_path and candidate.exists() and candidate.is_file():
-                if isinstance(FileResponse, type):
-                    return FileResponse(candidate)
-                return HTMLResponse(candidate.read_text(encoding="utf-8"))
-            return _spa_index()
-
         app.mount("/", StaticFiles(directory=FRONTEND_DIST, html=True), name="spa")
 
 

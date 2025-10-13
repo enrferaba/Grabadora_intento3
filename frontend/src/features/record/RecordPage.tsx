@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { qualityProfiles, streamTranscription, uploadTranscription } from "@/lib/api";
+import { streamTranscription, uploadTranscription } from "@/lib/api";
 import { AuthPanel } from "@/features/account/components/AuthPanel";
 import { SseViewer } from "@/features/transcribe/components/SseViewer";
 import { MessageBanner } from "@/components/MessageBanner";
+import { useQualityProfiles } from "@/lib/hooks";
 
 interface Props {
   onLibraryRefresh?: () => void;
@@ -27,12 +28,19 @@ export function RecordPage({ onLibraryRefresh }: Props) {
   const [viewerFullscreen, setViewerFullscreen] = useState(false);
   const stopStreamRef = useRef<() => void>();
   const [banner, setBanner] = useState<{ tone: "info" | "success" | "error"; message: string } | null>(null);
+  const { profiles } = useQualityProfiles();
 
   useEffect(() => () => {
     stopStreamRef.current?.();
     cancelAnimationFrame(animationRef.current ?? 0);
     audioContextRef.current?.close();
   }, []);
+
+  useEffect(() => {
+    if (profiles.length > 0 && !profiles.find((item) => item.id === profile)) {
+      setProfile(profiles[0].id);
+    }
+  }, [profiles, profile]);
 
   useEffect(() => {
     if (!banner || banner.tone === "error") return;
@@ -166,9 +174,9 @@ export function RecordPage({ onLibraryRefresh }: Props) {
             <label style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
               Perfil de calidad
               <select value={profile} onChange={(event) => setProfile(event.target.value)}>
-                {qualityProfiles().map((item) => (
+                {profiles.map((item) => (
                   <option key={item.id} value={item.id}>
-                    {item.title}
+                    {item.label}
                   </option>
                 ))}
               </select>

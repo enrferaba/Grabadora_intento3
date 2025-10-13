@@ -4,36 +4,11 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from decimal import Decimal
-from typing import Any, Dict, List, Optional, TypeAlias
+from typing import Any, Dict, List, Literal, Optional
 
-try:
+try:  # pragma: no cover - Python < 3.10
     from typing import TypeAlias  # type: ignore[attr-defined]
-except ImportError:  # pragma: no cover - Python < 3.10
-    from typing_extensions import TypeAlias  # type: ignore[assignment]
-
-try:
-    from typing import TypeAlias  # type: ignore[attr-defined]
-except ImportError:  # pragma: no cover - Python < 3.10
-    from typing_extensions import TypeAlias  # type: ignore[assignment]
-
-try:
-    from typing import TypeAlias  # type: ignore[attr-defined]
-except ImportError:  # pragma: no cover - Python < 3.10
-    from typing_extensions import TypeAlias  # type: ignore[assignment]
-
-try:
-    from typing import TypeAlias  # type: ignore[attr-defined]
-except ImportError:  # pragma: no cover - Python < 3.10
-    from typing_extensions import TypeAlias  # type: ignore[assignment]
-
-try:
-    from typing import TypeAlias  # type: ignore[attr-defined]
-except ImportError:  # pragma: no cover - Python < 3.10
-    from typing_extensions import TypeAlias  # type: ignore[assignment]
-
-try:
-    from typing import TypeAlias  # type: ignore[attr-defined]
-except ImportError:  # pragma: no cover - Python < 3.10
+except ImportError:  # pragma: no cover - fallback for typing.TypeAlias
     from typing_extensions import TypeAlias  # type: ignore[assignment]
 
 from .models import TranscriptionStatus
@@ -198,6 +173,7 @@ class TranscriptSummary(BaseModel):
     runtime_seconds: Optional[float] = None
     model_size: Optional[str] = None
     device_preference: Optional[str] = None
+    notes: Optional[str] = None
     beam_size: Optional[int] = None
     subject: Optional[str] = None
     output_folder: Optional[str] = None
@@ -227,6 +203,39 @@ class TranscriptExportRequest(BaseModel):
     destination: str
     format: str = "txt"
     note: Optional[str] = None
+
+
+class TranscriptUpdateRequest(BaseModel):
+    title: Optional[str] = None
+    tags: Optional[List[str]] = None
+    notes: Optional[str] = None
+    quality_profile: Optional[str] = None
+
+
+@_enable_from_attributes
+class QualityProfileSchema(BaseModel):
+    id: str
+    label: str
+    description: Optional[str] = None
+    latency_hint_ms: Optional[int] = None
+    cost_factor: Optional[float] = None
+
+
+class ProfilesResponse(BaseModel):
+    quality_profiles: List[QualityProfileSchema]
+    account_profiles: List[ProfileRead]
+
+
+class AppConfigResponse(BaseModel):
+    app_name: str
+    max_upload_size_mb: int
+    queue_backend: Literal["auto", "redis", "memory"]
+    sse_ping_interval: float
+    sse_retry_delay_ms: int
+    metrics_enabled: bool
+    spa_routes: List[str]
+    storage_ready: bool
+    features: Dict[str, Any] = Field(default_factory=dict)
 
 
 TranscriptionDetail = TranscriptDetail

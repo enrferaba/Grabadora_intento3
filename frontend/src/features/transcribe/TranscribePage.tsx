@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { downloadTranscript, qualityProfiles, streamTranscription, uploadTranscription } from "@/lib/api";
+import { downloadTranscript, streamTranscription, uploadTranscription } from "@/lib/api";
 import { SseViewer } from "@/features/transcribe/components/SseViewer";
 import { TranscriptionHistory } from "@/features/transcribe/components/TranscriptionHistory";
 import { MessageBanner } from "@/components/MessageBanner";
 import { Uploader, type UploaderHandle } from "@/features/transcribe/components/Uploader";
+import { useAppConfig, useQualityProfiles } from "@/lib/hooks";
 
 interface Props {
   onLibraryRefresh?: () => void;
@@ -38,12 +39,20 @@ export function TranscribePage({ onLibraryRefresh }: Props) {
   const [viewerFontSize, setViewerFontSize] = useState(1.1);
   const [viewerFullscreen, setViewerFullscreen] = useState(false);
   const [historyRefreshToken, setHistoryRefreshToken] = useState(0);
+  const { profiles } = useQualityProfiles();
+  const { config } = useAppConfig();
   const uploaderRef = useRef<UploaderHandle | null>(null);
   const [actionBanner, setActionBanner] = useState<{ tone: "success" | "error" | "info"; message: string } | null>(null);
   const [downloadFormat, setDownloadFormat] = useState<TranscriptFormat>("txt");
   const [downloading, setDownloading] = useState(false);
 
   useEffect(() => () => stopStreamRef.current?.(), []);
+
+  useEffect(() => {
+    if (profiles.length > 0 && !profiles.find((item) => item.id === profile)) {
+      setProfile(profiles[0].id);
+    }
+  }, [profiles, profile]);
   useEffect(() => {
     if (!actionBanner || actionBanner.tone === "error") {
       return;
@@ -291,7 +300,7 @@ export function TranscribePage({ onLibraryRefresh }: Props) {
               </span>
             </div>
               <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-              {qualityProfiles().map((item) => (
+              {profiles.map((item) => (
                 <button
                   key={item.id}
                   type="button"
@@ -308,7 +317,7 @@ export function TranscribePage({ onLibraryRefresh }: Props) {
                     opacity: isBusy && profile !== item.id ? 0.6 : 1,
                   }}
                 >
-                  <strong style={{ display: "block", fontSize: "0.85rem" }}>{item.title}</strong>
+                  <strong style={{ display: "block", fontSize: "0.85rem" }}>{item.label}</strong>
                   <span style={{ fontSize: "0.7rem", color: "#94a3b8" }}>{item.description}</span>
                 </button>
               ))}
@@ -316,6 +325,11 @@ export function TranscribePage({ onLibraryRefresh }: Props) {
           </header>
 
           <Uploader ref={uploaderRef} onSelect={handleSubmit} busy={isBusy} />
+          {config?.max_upload_size_mb && (
+            <span style={{ color: "#64748b", fontSize: "0.85rem" }}>
+              Máximo {config.max_upload_size_mb} MB por archivo.
+            </span>
+          )}
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1rem" }}>
             <label style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>

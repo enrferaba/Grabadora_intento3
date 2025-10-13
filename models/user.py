@@ -1,7 +1,7 @@
 """SQLAlchemy models describing users, profiles, usage metrics, and transcripts."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import List, Optional
 
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, Numeric, String, Text
@@ -20,7 +20,7 @@ class User(Base):
     email = Column(String(255), unique=True, nullable=False, index=True)
     hashed_password = Column(String(255), nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC), nullable=False)
 
     profiles: List["Profile"] = relationship("Profile", back_populates="owner", cascade="all, delete-orphan")
     usage_meters: List["UsageMeter"] = relationship(
@@ -41,7 +41,7 @@ class Profile(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     name = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC), nullable=False)
 
     owner: User = relationship("User", back_populates="profiles")
     usage_meters: List["UsageMeter"] = relationship(
@@ -64,7 +64,11 @@ class UsageMeter(Base):
     month = Column(String(7), nullable=False, index=True)
     transcription_seconds = Column(Numeric(scale=2), default=0)
     transcription_cost = Column(Numeric(scale=4), default=0)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
 
     user: User = relationship("User", back_populates="usage_meters")
     profile: Profile = relationship("Profile", back_populates="usage_meters")
@@ -90,8 +94,14 @@ class Transcript(Base):
     segments = Column(Text, nullable=True)
     duration_seconds = Column(Numeric(scale=2), nullable=True)
     error_message = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC), nullable=False)
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
     completed_at = Column(DateTime, nullable=True)
 
     user: User = relationship("User", back_populates="transcripts")

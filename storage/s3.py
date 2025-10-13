@@ -3,9 +3,10 @@ from __future__ import annotations
 
 import io
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import BinaryIO, Dict, List, Optional
+from threading import Lock
+from typing import BinaryIO, Dict, List, Optional, Tuple
 
 try:  # pragma: no cover - optional dependency
     import boto3
@@ -28,6 +29,8 @@ class S3StorageClient:
     """Simplified wrapper for boto3 clients used by the application."""
 
     _memory_buckets: Dict[str, Dict[str, bytes]] = {}
+    _bucket_state: Dict[Tuple[str, str, str], bool] = {}
+    _bucket_lock = Lock()
 
     def __init__(self) -> None:
         settings = get_settings()
@@ -61,6 +64,8 @@ class S3StorageClient:
                 )
             self._local_mode = True
             self._ensure_local_dirs()
+        with self._bucket_lock:
+            self._bucket_state.clear()
         self._client = None
 
     def _ensure_local_dirs(self) -> None:
@@ -87,13 +92,30 @@ class S3StorageClient:
         self._ensure_memory_bucket(self.audio_bucket)
         self._ensure_memory_bucket(self.transcripts_bucket)
 
+    def _rewind(self, fileobj: BinaryIO) -> None:
+        try:
+            fileobj.seek(0, io.SEEK_SET)  # type: ignore[attr-defined]
+        except (AttributeError, OSError, io.UnsupportedOperation):
+            pass
+
     def ensure_buckets(self) -> None:
+        cache_key = (self.audio_bucket, self.transcripts_bucket, self._endpoint_url or "local")
+        with self._bucket_lock:
+            if self._bucket_state.get(cache_key):
+                if self._local_mode:
+                    self._ensure_local_dirs()
+                elif self._client is None:
+                    self._ensure_memory_bucket(self.audio_bucket)
+                    self._ensure_memory_bucket(self.transcripts_bucket)
+                return
         if self._client is None:
             if self._local_mode:
                 self._ensure_local_dirs()
-                return
-            self._ensure_memory_bucket(self.audio_bucket)
-            self._ensure_memory_bucket(self.transcripts_bucket)
+            else:
+                self._ensure_memory_bucket(self.audio_bucket)
+                self._ensure_memory_bucket(self.transcripts_bucket)
+            with self._bucket_lock:
+                self._bucket_state[cache_key] = True
             return
         for bucket in {self.audio_bucket, self.transcripts_bucket}:
             try:
@@ -108,8 +130,11 @@ class S3StorageClient:
             except EndpointConnectionError as exc:  # pragma: no cover - network failure
                 self._activate_local_mode(exc)
                 return
+        with self._bucket_lock:
+            self._bucket_state[cache_key] = True
 
     def upload_audio(self, fileobj: BinaryIO, object_name: str) -> str:
+        self._rewind(fileobj)
         if self._local_mode:
             destination = self._local_path(self._local_audio_dir, object_name)
             with open(destination, "wb") as handle:
@@ -120,6 +145,7 @@ class S3StorageClient:
             store = self._ensure_memory_bucket(self.audio_bucket)
             store[object_name] = data
             return object_name
+        self._rewind(fileobj)
         self._client.upload_fileobj(fileobj, self.audio_bucket, object_name)
         return object_name
 
@@ -142,14 +168,17 @@ class S3StorageClient:
             source = self._local_path(self._local_audio_dir, object_name)
             if not source.exists():
                 raise FileNotFoundError(object_name)
+            destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_bytes(source.read_bytes())
             return
         if self._client is None:
             store = self._ensure_memory_bucket(self.audio_bucket)
             if object_name not in store:
                 raise FileNotFoundError(object_name)
+            destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_bytes(store[object_name])
             return
+        destination.parent.mkdir(parents=True, exist_ok=True)
         with open(destination, "wb") as file_obj:
             self._client.download_fileobj(self.audio_bucket, object_name, file_obj)
 
@@ -174,6 +203,44 @@ class S3StorageClient:
         body = response["Body"].read()
         return body.decode("utf-8")
 
+    def delete_audio(self, object_name: str) -> None:
+        """Remove an audio blob from the configured backend."""
+
+        if self._local_mode:
+            target = self._local_path(self._local_audio_dir, object_name)
+            if target.exists():
+                target.unlink()
+            return
+        if self._client is None:
+            store = self._ensure_memory_bucket(self.audio_bucket)
+            store.pop(object_name, None)
+            return
+        try:
+            self._client.delete_object(Bucket=self.audio_bucket, Key=object_name)
+        except ClientError as exc:
+            code = getattr(getattr(exc, "response", {}), "get", lambda *_: None)("Error", {}).get("Code")  # type: ignore[arg-type]
+            if code not in {"NoSuchKey", "404"}:
+                raise
+
+    def delete_transcript(self, object_name: str) -> None:
+        """Remove a transcript artifact regardless of the storage backend."""
+
+        if self._local_mode:
+            target = self._local_path(self._local_transcripts_dir, object_name)
+            if target.exists():
+                target.unlink()
+            return
+        if self._client is None:
+            store = self._ensure_memory_bucket(self.transcripts_bucket)
+            store.pop(object_name, None)
+            return
+        try:
+            self._client.delete_object(Bucket=self.transcripts_bucket, Key=object_name)
+        except ClientError as exc:
+            code = getattr(getattr(exc, "response", {}), "get", lambda *_: None)("Error", {}).get("Code")  # type: ignore[arg-type]
+            if code not in {"NoSuchKey", "404"}:
+                raise
+
     def list_transcripts(self, prefix: Optional[str] = None) -> List[dict]:
         if self._local_mode:
             items: List[dict] = []
@@ -183,10 +250,11 @@ class S3StorageClient:
                 relative = path.relative_to(self._local_transcripts_dir).as_posix()
                 if prefix and not relative.startswith(prefix):
                     continue
+                stat = path.stat()
                 items.append({
                     "key": relative,
-                    "size": path.stat().st_size,
-                    "last_modified": datetime.utcfromtimestamp(path.stat().st_mtime),
+                    "size": stat.st_size,
+                    "last_modified": datetime.fromtimestamp(stat.st_mtime, tz=UTC),
                 })
             return items
         if self._client is None:
@@ -198,7 +266,7 @@ class S3StorageClient:
                 items.append({
                     "key": key,
                     "size": len(payload),
-                    "last_modified": datetime.utcnow(),
+                    "last_modified": datetime.now(UTC),
                 })
             return items
         paginator = self._client.get_paginator("list_objects_v2")
@@ -236,15 +304,3 @@ class S3StorageClient:
         except ClientError:
             logger.exception("Unable to generate presigned URL", extra={"key": object_name})
             return None
-
-    def delete_transcript(self, object_name: str) -> None:
-        if self._local_mode:
-            path = self._local_path(self._local_transcripts_dir, object_name)
-            if path.exists():
-                path.unlink()
-            return
-        if self._client is None:
-            store = self._ensure_memory_bucket(self.transcripts_bucket)
-            store.pop(object_name, None)
-            return
-        self._client.delete_object(Bucket=self.transcripts_bucket, Key=object_name)
