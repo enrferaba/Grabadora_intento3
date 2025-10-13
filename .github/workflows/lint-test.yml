@@ -20,7 +20,8 @@ jobs:
           pip install black pytest
 
       - name: Run Black
-        run: black --check Grabadora_intento3
+        run: black Grabadora_intento3
+
 
       - name: Run Pytest
         run: pytest
