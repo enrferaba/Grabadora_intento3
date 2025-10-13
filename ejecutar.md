@@ -101,6 +101,8 @@ docker compose up --build
 docker compose --profile queue up --build
 ```
 
+> Nota: El archivo `docker-compose.yml` carga `.env.example` por defecto. Si copias tus credenciales a `.env`, exporta `GRABADORA_ENV_FILE=.env` (PowerShell: `$env:GRABADORA_ENV_FILE='.env'`) antes de ejecutar `docker compose` para que el contenedor use ese archivo.
+
 El perfil por defecto levanta API (8000), frontend en Vite (5173), Redis, PostgreSQL y MinIO. Comprueba los healthchecks con `docker compose ps` y espera a ver `healthy` antes de probar.
 
 ## 4. Pruebas rápidas

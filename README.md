@@ -98,7 +98,7 @@
 ## 4. Puesta en marcha
 
 ### 4.1 Arranque rápido con Docker Compose
-1. Copiar variables: `cp .env.example .env` y rellena credenciales. Si dejas el `GRABADORA_JWT_SECRET_KEY` de ejemplo, `python ejecutar.py` generará uno aleatorio y lo guardará automáticamente para evitar bloqueos.
+1. Variables de entorno: el stack carga por defecto `.env.example`, así que `docker compose up` funciona aunque no crees `.env`. Si necesitas personalizar valores, copia primero `cp .env.example .env`, edítalo y lanza `GRABADORA_ENV_FILE=.env docker compose up --build` (PowerShell: `$env:GRABADORA_ENV_FILE='.env'; docker compose up --build`). Dejar `GRABADORA_JWT_SECRET_KEY` con el valor de ejemplo hará que `python ejecutar.py` genere y guarde un secreto aleatorio.
 2. Preparar entorno local (opcional pero recomendado): `python3.11 -m venv .venv && source .venv/bin/activate` (Linux/macOS) o `py -3.11 -m venv .venv` (Windows), luego `python doctor.py --mode stack` para validar Python ≥3.11, Node ≥20, puertos libres y acceso a MinIO.
 3. Si el frontend cambió, instala dependencias: `cd frontend && npm install && cd ..`.
 4. Levantar servicios principales: `docker compose up --build`. Usa `docker compose --profile queue up --build` si quieres incluir el worker de RQ.

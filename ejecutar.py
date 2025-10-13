@@ -203,8 +203,9 @@ def _persist_secret_to_env(secret: str) -> None:
         )
         return
 
-    updated_lines = []
-    replaced = False
+    target_keys = ("GRABADORA_JWT_SECRET_KEY", "JWT_SECRET", "JWT_SECRET_KEY")
+    updated_lines: list[str] = []
+    seen: set[str] = set()
     for line in contents.splitlines():
         stripped = line.strip()
         if not stripped or stripped.startswith("#"):
@@ -212,16 +213,18 @@ def _persist_secret_to_env(secret: str) -> None:
             continue
         key, _, value = line.partition("=")
         key_upper = key.strip().upper()
-        if key_upper in {"GRABADORA_JWT_SECRET_KEY", "JWT_SECRET", "JWT_SECRET_KEY"}:
-            updated_lines.append(f"GRABADORA_JWT_SECRET_KEY={secret}")
-            replaced = True
+        if key_upper in target_keys:
+            updated_lines.append(f"{key_upper}={secret}")
+            seen.add(key_upper)
         else:
             updated_lines.append(line)
 
-    if not replaced:
+    missing_keys = [key for key in target_keys if key not in seen]
+    if missing_keys:
         if updated_lines and updated_lines[-1] != "":
             updated_lines.append("")
-        updated_lines.append(f"GRABADORA_JWT_SECRET_KEY={secret}")
+        for key in missing_keys:
+            updated_lines.append(f"{key}={secret}")
 
     new_content = "\n".join(updated_lines).rstrip() + "\n"
     try:
