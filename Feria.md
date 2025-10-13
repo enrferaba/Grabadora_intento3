@@ -57,6 +57,8 @@ Esta guía resume los pasos de validación y arranque que usamos durante las dem
 
 El frontend utiliza el header `Authorization: Bearer <token>` en todas las llamadas cuando guardas el token en la sesión.
 
+> Truco rápido: `python scripts/seed_dev.py` crea automáticamente el usuario `admin@local.com / admin123` y evita repetir estos pasos tras cada reinicio de la base de datos.
+
 ## 5. Alternativa stack completa
 
 Cuando quieras usar Postgres/Redis/MinIO (por ejemplo con Docker Compose):

@@ -102,6 +102,7 @@
 2. Preparar entorno local (opcional pero recomendado): `python3.11 -m venv .venv && source .venv/bin/activate` (Linux/macOS) o `py -3.11 -m venv .venv` (Windows), luego `python doctor.py --mode stack` para validar Python ≥3.11, Node ≥20, puertos libres y acceso a MinIO.
 3. Si el frontend cambió, instala dependencias: `cd frontend && npm install && cd ..`.
 4. Levantar servicios principales: `docker compose up --build`. Usa `docker compose --profile queue up --build` si quieres incluir el worker de RQ.
+   > ⚠️ Usa `--build` con dos guiones. El atajo `-build` provoca el error `unknown shorthand flag: 'b'` en Docker Compose v2.
 5. URLs esperadas: `http://localhost:5173/` (SPA en Vite), `http://localhost:8000/docs`, `http://localhost:8000/healthz`, `http://localhost:9001/` (MinIO console).
 
 ### 4.2 Ejecución local sin Docker
@@ -114,6 +115,10 @@
 5. Arranca el backend: `uvicorn app.main:app --reload --host 0.0.0.0 --port 8000`.
 6. En otra terminal, sirve la SPA: `cd frontend && npm install && npm run dev -- --host 0.0.0.0 --port 5173`.
 7. (Opcional) Worker dedicado: `rq worker transcription --url $GRABADORA_REDIS_URL` o deja que el backend use la cola en memoria.
+
+### 4.3 Sembrar un usuario administrador en local
+
+Cuando reinicies SQLite o quieras preparar demos rápidas, ejecuta `python scripts/seed_dev.py`. El script creará (o actualizará) un usuario `admin@local.com` con contraseña `admin123` y un perfil "Default". Puedes personalizar correo y contraseña con `--email` y `--password`, o regenerar la contraseña de un usuario existente con `--reset-password`.
 
 ## 5. Verificación manual recomendada
 

@@ -101,9 +101,21 @@ docker compose up --build
 docker compose --profile queue up --build
 ```
 
+> ⚠️ Usa `--build` con dos guiones. El atajo `-build` muestra `unknown shorthand flag: 'b'` en Compose v2.
+
 > Nota: El repositorio trae un `.env` básico que apunta a `.env.example`, así que `docker compose up --build` funciona sin pasos previos. Para credenciales propias crea `.env.local` (git lo ignora), ajústalo y cambia `GRABADORA_ENV_FILE=.env.local` en `.env` o exporta `GRABADORA_ENV_FILE=.env.local` antes de levantar los contenedores.
 
 El perfil por defecto levanta API (8000), frontend en Vite (5173), Redis, PostgreSQL y MinIO. Comprueba los healthchecks con `docker compose ps` y espera a ver `healthy` antes de probar.
+
+### 3.4 Semilla rápida de un usuario admin
+
+Si quieres saltarte el alta manual en Swagger, ejecuta:
+
+```bash
+python scripts/seed_dev.py  # crea admin@local.com / admin123 si no existe
+```
+
+Usa `--email`, `--password` y `--reset-password` para personalizar la cuenta.
 
 ## 4. Pruebas rápidas
 

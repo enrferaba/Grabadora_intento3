@@ -160,6 +160,7 @@ def audit_repo(repo: Path) -> str:
         "Ejecuta `python ejecutar.py` en modo local tras instalar dependencias.",
         "Revisa docker-compose.yml para eliminar la clave version: y mantener healthchecks.",
         "Verifica que app/database.py exporta Base, get_engine() y SessionLocal.",
+        "Usa `python scripts/seed_dev.py` para crear rápidamente un usuario admin en desarrollo.",
     ]
     for suggestion in suggestions:
         out.append(bullet(suggestion))
