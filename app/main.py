@@ -272,6 +272,19 @@ QUALITY_PROFILES = {
 }
 
 SPA_ROUTE_HINTS = ["/", "/transcribir", "/grabar", "/biblioteca", "/cuenta"]
+API_ROUTE_PREFIXES = (
+    "docs",
+    "openapi.json",
+    "redoc",
+    "auth",
+    "transcribe",
+    "jobs",
+    "transcripts",
+    "healthz",
+    "metrics",
+    "profiles",
+    "config",
+)
 
 try:  # pragma: no cover - optional dependency
     import structlog
@@ -370,8 +383,6 @@ if FastAPI is not None:
 API_ERRORS = Counter("api_errors_total", "Total API errors", namespace=settings.prometheus_namespace)
 QUEUE_LENGTH = Gauge("queue_length", "Number of queued transcription jobs", namespace=settings.prometheus_namespace)
 GPU_USAGE = Gauge("gpu_memory_usage_bytes", "Approximate GPU memory usage", namespace=settings.prometheus_namespace)
-
-SPA_MOUNTED = False
 
 
 def _sample_gpu_usage() -> None:
@@ -577,8 +588,45 @@ async def _stream_job(
 if app is not None:
 
     if StaticFiles is not None and FRONTEND_DIST.exists():
-        app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="spa-assets")
-        SPA_MOUNTED = True
+
+        class SPAStaticFiles(StaticFiles):
+            async def get_response(self, path: str, scope):  # type: ignore[override]
+                normalized = path.strip("/")
+                if normalized:
+                    for prefix in API_ROUTE_PREFIXES:
+                        if normalized == prefix or normalized.startswith(f"{prefix}/"):
+                            return await super().get_response(path, scope)
+                try:
+                    response = await super().get_response(path, scope)
+                except HTTPException as exc:
+                    if exc.status_code != 404:
+                        raise
+                    return await super().get_response("index.html", scope)
+                if getattr(response, "status_code", None) == 404:
+                    return await super().get_response("index.html", scope)
+                return response
+
+        app.mount("/", SPAStaticFiles(directory=FRONTEND_DIST, html=True), name="spa")
+
+    else:
+
+        @app.get("/", response_class=HTMLResponse, include_in_schema=False)
+        async def root() -> HTMLResponseType:
+            return _spa_index()
+
+        @app.get("/{full_path:path}", include_in_schema=False)
+        async def spa_router(full_path: str) -> ResponseType:
+            candidate = FRONTEND_DIST / full_path
+            if full_path and candidate.exists() and candidate.is_file():
+                if isinstance(FileResponse, type):
+                    return FileResponse(candidate)
+                return HTMLResponse(candidate.read_text(encoding="utf-8"))
+            normalized = full_path.strip("/")
+            if normalized:
+                for prefix in API_ROUTE_PREFIXES:
+                    if normalized == prefix or normalized.startswith(f"{prefix}/"):
+                        raise HTTPException(status_code=404, detail="Not Found")
+            return _spa_index()
 
     @app.exception_handler(Exception)
     async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponseType:
@@ -1011,23 +1059,6 @@ if app is not None:
             storage_ready=storage_ready,
             features=features,
         )
-
-    @app.get("/", response_class=HTMLResponse, include_in_schema=False)
-    async def root() -> HTMLResponseType:
-        return _spa_index()
-
-    @app.get("/{full_path:path}", include_in_schema=False)
-    async def spa_router(full_path: str) -> ResponseType:
-        candidate = FRONTEND_DIST / full_path
-        if full_path and candidate.exists() and candidate.is_file():
-            if isinstance(FileResponse, type):
-                return FileResponse(candidate)
-            return HTMLResponse(candidate.read_text(encoding="utf-8"))
-        return _spa_index()
-
-    if SPA_MOUNTED:
-        app.mount("/", StaticFiles(directory=FRONTEND_DIST, html=True), name="spa")
-
 
 def create_app() -> FastAPIApp:
     if app is None:

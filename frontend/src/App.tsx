@@ -231,7 +231,8 @@ export default function App() {
   const handleRefresh = () => setRefreshToken((value) => value + 1);
   const goTo = (path: string) => navigate(path);
 
-  const storageFeature = ((config?.features?.storage as { mode?: string } | undefined)?.mode ?? "automático").toString();
+  const storageMode = ((config?.features?.storage as { mode?: string } | undefined)?.mode ?? "automático").toString();
+  const storageReady = config?.storage_ready ?? false;
   const queueBackend = config?.queue_backend ?? "auto";
   const uploadLimit = config?.max_upload_size_mb ? `${config.max_upload_size_mb} MB` : "–";
 
@@ -294,8 +295,13 @@ export default function App() {
                 <span style={metricLabelStyle}>Cola seleccionada</span>
               </div>
               <div style={metricStyle}>
-                <span style={metricValueStyle}>{storageFeature === "remote" ? "S3" : "Local"}</span>
-                <span style={metricLabelStyle}>Destino de ficheros</span>
+                <span style={metricValueStyle}>{storageMode === "remote" ? "S3" : "Local"}</span>
+                <span style={{ ...metricLabelStyle, display: "flex", flexDirection: "column" }}>
+                  <span>Destino de ficheros</span>
+                  <span style={{ fontSize: "0.8rem", color: storageReady ? "#34d399" : "#fbbf24" }}>
+                    {storageReady ? "Listo para escribir" : "Revisión recomendada"}
+                  </span>
+                </span>
               </div>
             </div>
             <div

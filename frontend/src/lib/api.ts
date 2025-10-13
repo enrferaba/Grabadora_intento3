@@ -85,6 +85,7 @@ export interface AppConfig {
   sse_retry_delay_ms: number;
   metrics_enabled: boolean;
   spa_routes: string[];
+  storage_ready: boolean;
   features: Record<string, unknown>;
 }
 
