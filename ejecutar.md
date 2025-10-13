@@ -37,6 +37,8 @@ npm install
 cd ..
 ```
 
+> Si olvidas actualizar `GRABADORA_JWT_SECRET_KEY` en `.env`, `python ejecutar.py` generará un secreto aleatorio y lo guardará automáticamente para los siguientes arranques.
+
 ## 2. Uso de `doctor.py`
 
 `python doctor.py` realiza comprobaciones previas al arranque del stack.
@@ -120,5 +122,9 @@ El perfil por defecto levanta API (8000), frontend en Vite (5173), Redis, Postgr
 | `Falling back to local disk storage...` | MinIO/S3 no disponible. | Documenta el modo local en README y confirma permisos de escritura. |
 | Pantalla completa sin salida visible | UI sin botón de salida. | Añadir botón “Salir de pantalla completa” y atajos en la SPA. |
 | `python doctor.py` usa Python 3.9 de Microsoft Store | Alias global invade el PATH. | Deshabilita App Installer (`winget settings`) y usa `.venv\Scripts\python.exe`. |
+
+## 6. Auditoría rápida del repositorio
+
+Ejecuta `python scripts/revisa_repo.py` desde la raíz para generar `RepoAudit.md` con un checklist de `.env`, Docker Compose y migraciones. Repasa las advertencias antes de abrir un PR o desplegar.
 
 Mantén este archivo actualizado cuando cambien parámetros o banderas de `ejecutar.py`.

@@ -98,7 +98,7 @@
 ## 4. Puesta en marcha
 
 ### 4.1 Arranque rápido con Docker Compose
-1. Copiar variables: `cp .env.example .env` y rellenar credenciales **antes** de arrancar (el backend falla si detecta secretos de ejemplo).
+1. Copiar variables: `cp .env.example .env` y rellena credenciales. Si dejas el `GRABADORA_JWT_SECRET_KEY` de ejemplo, `python ejecutar.py` generará uno aleatorio y lo guardará automáticamente para evitar bloqueos.
 2. Preparar entorno local (opcional pero recomendado): `python3.11 -m venv .venv && source .venv/bin/activate` (Linux/macOS) o `py -3.11 -m venv .venv` (Windows), luego `python doctor.py --mode stack` para validar Python ≥3.11, Node ≥20, puertos libres y acceso a MinIO.
 3. Si el frontend cambió, instala dependencias: `cd frontend && npm install && cd ..`.
 4. Levantar servicios principales: `docker compose up --build`. Usa `docker compose --profile queue up --build` si quieres incluir el worker de RQ.
@@ -109,10 +109,10 @@
 2. Instalar dependencias backend: `pip install -r requirements.txt` (o `poetry install`).
    * El archivo principal incluye la pila de ML (`faster-whisper`, `whisperx`, `torch`).
    * Para un arranque ligero (sin modelos), puedes usar `pip install -r requirements/base.txt`.
-3. Validar entorno y puertos libres: `python doctor.py --mode local --install-missing --fix-frontend`.
-4. Ejecutar migraciones si usas PostgreSQL: `alembic upgrade head`. En modo local sin DB externa se usará SQLite automáticamente.
-5. Arrancar el backend: `uvicorn app.main:app --reload --host 0.0.0.0 --port 8000`.
-6. En otra terminal, servir la SPA: `cd frontend && npm install && npm run dev -- --host 0.0.0.0 --port 5173`.
+3. Valida entorno y puertos libres: `python doctor.py --mode local --install-missing --fix-frontend`.
+4. Ejecuta migraciones si usas PostgreSQL: `alembic upgrade head`. En modo local sin DB externa se usará SQLite automáticamente.
+5. Arranca el backend: `uvicorn app.main:app --reload --host 0.0.0.0 --port 8000`.
+6. En otra terminal, sirve la SPA: `cd frontend && npm install && npm run dev -- --host 0.0.0.0 --port 5173`.
 7. (Opcional) Worker dedicado: `rq worker transcription --url $GRABADORA_REDIS_URL` o deja que el backend use la cola en memoria.
 
 ## 5. Verificación manual recomendada
@@ -132,6 +132,7 @@
 - [routes.md](routes.md): tabla de rutas frontend vs backend, métodos, Content-Type y estado.
 - [errors.md](errors.md): incidentes reales, causa raíz e instrucciones de mitigación.
 - `docs/configuration.md`, `docs/deployment.md`: profundizan en despliegue avanzado.
+- [scripts/revisa_repo.py](scripts/revisa_repo.py): genera `RepoAudit.md` para detectar configuraciones faltantes (ejecuta `python scripts/revisa_repo.py`).
 
 ## 7. Próximos entregables sugeridos
 

@@ -2,13 +2,22 @@
 from __future__ import annotations
 
 import os
+import secrets
 from functools import lru_cache
+from pathlib import Path
 from typing import Any, Literal
 
 from dotenv import dotenv_values
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, SecretStr
 
 ENV_PREFIX = "GRABADORA_"
+_PLACEHOLDER_SECRETS = {
+    "",
+    "please-change-this-secret",
+    "change-me",
+    "super-secret",
+    "local-dev-secret",
+}
 
 
 def _collect_env(prefix: str = ENV_PREFIX) -> dict[str, Any]:
@@ -174,19 +183,82 @@ def _validate_required_settings(settings: Settings) -> None:
     """Fail fast when essential secrets are missing or placeholders."""
 
     missing: dict[str, Any] = {}
-    if settings.jwt_secret_key.get_secret_value() in {
-        "",
-        "change-me",
-        "super-secret",
-        "please-change-this-secret",
-    }:
-        missing["GRABADORA_JWT_SECRET_KEY"] = "Define un secreto fuerte para JWT."
+    if settings.jwt_secret_key.get_secret_value() in _PLACEHOLDER_SECRETS:
+        if not _attempt_auto_secret(settings):
+            missing["GRABADORA_JWT_SECRET_KEY"] = "Define un secreto fuerte para JWT."
     for bucket_key in (settings.s3_bucket_audio, settings.s3_bucket_transcripts):
         if not bucket_key.strip():
             missing["GRABADORA_S3_BUCKET_*"] = "Los buckets de audio y transcripciones no pueden estar vacíos."
     if missing:
         details = "; ".join(f"{key}: {reason}" for key, reason in missing.items())
         raise ValueError(f"Configuración incompleta: {details}")
+
+
+def _attempt_auto_secret(settings: Settings) -> bool:
+    """Try to transparently generate a JWT secret for non-production environments."""
+
+    if settings.app_env == "production":
+        return False
+    new_secret = secrets.token_urlsafe(48)
+    settings.jwt_secret_key = SecretStr(new_secret)
+    canonical_key = f"{ENV_PREFIX}JWT_SECRET_KEY"
+    os.environ.setdefault(canonical_key, new_secret)
+    # Preserve compatibility with legacy environment keys consumed by external tooling.
+    os.environ.setdefault("JWT_SECRET", new_secret)
+    os.environ.setdefault("JWT_SECRET_KEY", new_secret)
+    _persist_secret_to_env(new_secret)
+    print(
+        "⚠️  GRABADORA_JWT_SECRET_KEY usaba un valor de ejemplo. "
+        "Se generó y persistió un secreto aleatorio para este entorno.",
+    )
+    return True
+
+
+def _persist_secret_to_env(secret: str) -> None:
+    """Write the generated secret back to `.env` when possible."""
+
+    env_path = Path(".env")
+    try:
+        if env_path.exists():
+            contents = env_path.read_text(encoding="utf-8")
+        else:
+            contents = ""
+    except UnicodeDecodeError:
+        print(
+            "⚠️  No se pudo actualizar .env con el secreto generado (codificación no UTF-8). "
+            "Actualízalo manualmente.",
+        )
+        return
+
+    updated_lines: list[str] = []
+    replaced = False
+    for line in contents.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            updated_lines.append(line)
+            continue
+        key, _, _ = line.partition("=")
+        key_upper = key.strip().upper()
+        if key_upper in {"GRABADORA_JWT_SECRET_KEY", "JWT_SECRET", "JWT_SECRET_KEY"}:
+            updated_lines.append(f"GRABADORA_JWT_SECRET_KEY={secret}")
+            replaced = True
+        else:
+            updated_lines.append(line)
+
+    if not replaced:
+        if updated_lines and updated_lines[-1] != "":
+            updated_lines.append("")
+        updated_lines.append(f"GRABADORA_JWT_SECRET_KEY={secret}")
+
+    new_content = "\n".join(updated_lines).rstrip() + "\n"
+    try:
+        env_path.write_text(new_content, encoding="utf-8")
+    except OSError as exc:
+        print(
+            "⚠️  No se pudo escribir el nuevo GRABADORA_JWT_SECRET_KEY en .env:",
+            exc,
+        )
+        return
 
 
 # Backwards compatibility alias for code that expects a module-level ``settings``.

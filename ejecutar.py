@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import secrets
 import sys
 from pathlib import Path
 
@@ -135,11 +136,103 @@ def _apply_environment_for_mode(mode: str) -> None:
         sqlite_path = Path("grabadora.db").resolve()
         os.environ.setdefault("GRABADORA_DATABASE_URL", f"sqlite:///{sqlite_path}")
         os.environ.setdefault("GRABADORA_FRONTEND_ORIGIN", "http://localhost:5173")
+        _ensure_jwt_secret()
     else:
         os.environ.setdefault("GRABADORA_QUEUE_BACKEND", "redis")
     _refresh_settings_cache()
     if mode == "stack":
         _validate_stack_runtime()
+
+
+def _ensure_jwt_secret() -> None:
+    """Guarantee a valid JWT secret for local execution."""
+
+    placeholders = {
+        "",
+        "please-change-this-secret",
+        "change-me",
+        "super-secret",
+    }
+    env_candidates = [
+        "GRABADORA_JWT_SECRET_KEY",
+        "JWT_SECRET",
+        "JWT_SECRET_KEY",
+    ]
+    current = None
+    current_key = None
+    for key in env_candidates:
+        value = os.environ.get(key)
+        if value is not None:
+            current = value.strip()
+            current_key = key
+            break
+    if current and current not in placeholders:
+        # Already defined with a non-placeholder value.
+        if current_key != "GRABADORA_JWT_SECRET_KEY":
+            os.environ.setdefault("GRABADORA_JWT_SECRET_KEY", current)
+        return
+
+    # Generate a strong secret and export it via the canonical key.
+    secret = secrets.token_urlsafe(48)
+    os.environ["GRABADORA_JWT_SECRET_KEY"] = secret
+    os.environ.setdefault("JWT_SECRET", secret)
+    os.environ.setdefault("JWT_SECRET_KEY", secret)
+    if current:
+        print(
+            "⚠️  Se detectó un GRABADORA_JWT_SECRET_KEY de ejemplo. "
+            "Se generó un secreto temporal para esta sesión.",
+        )
+    else:
+        print("ℹ️  No se encontró GRABADORA_JWT_SECRET_KEY; se generó uno temporal.")
+    _persist_secret_to_env(secret)
+
+
+def _persist_secret_to_env(secret: str) -> None:
+    """Write the generated secret back to .env so future runs succeed."""
+
+    env_path = Path(".env")
+    try:
+        if env_path.exists():
+            contents = env_path.read_text(encoding="utf-8")
+        else:
+            contents = ""
+    except UnicodeDecodeError:
+        print(
+            "⚠️  No se pudo actualizar .env (codificación no UTF-8). "
+            "Actualiza el secreto manualmente.",
+        )
+        return
+
+    updated_lines = []
+    replaced = False
+    for line in contents.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            updated_lines.append(line)
+            continue
+        key, _, value = line.partition("=")
+        key_upper = key.strip().upper()
+        if key_upper in {"GRABADORA_JWT_SECRET_KEY", "JWT_SECRET", "JWT_SECRET_KEY"}:
+            updated_lines.append(f"GRABADORA_JWT_SECRET_KEY={secret}")
+            replaced = True
+        else:
+            updated_lines.append(line)
+
+    if not replaced:
+        if updated_lines and updated_lines[-1] != "":
+            updated_lines.append("")
+        updated_lines.append(f"GRABADORA_JWT_SECRET_KEY={secret}")
+
+    new_content = "\n".join(updated_lines).rstrip() + "\n"
+    try:
+        env_path.write_text(new_content, encoding="utf-8")
+    except OSError as exc:
+        print(
+            "⚠️  No se pudo escribir el nuevo GRABADORA_JWT_SECRET_KEY en .env:",
+            exc,
+        )
+        return
+    print("   • Se guardó un nuevo GRABADORA_JWT_SECRET_KEY en .env")
 
 
 def _ensure_local_database(mode: str) -> None:
