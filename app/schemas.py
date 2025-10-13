@@ -1,4 +1,5 @@
 """Schema definitions with optional Pydantic support."""
+
 from __future__ import annotations
 
 import json
@@ -17,6 +18,7 @@ from .models import TranscriptionStatus
 
 try:  # pragma: no cover - optional dependency
     from pydantic import BaseModel, EmailStr, Field
+
     try:  # pragma: no cover - optional dependency
         from pydantic import ConfigDict  # type: ignore[attr-defined]
     except ImportError:  # pragma: no cover - Pydantic v1
@@ -67,7 +69,10 @@ except ImportError:  # pragma: no cover
                 setattr(self, name, value)
 
         def dict(self) -> dict:  # pragma: no cover - helper for testing
-            return {name: getattr(self, name) for name in getattr(self, "__annotations__", {})}
+            return {
+                name: getattr(self, name)
+                for name in getattr(self, "__annotations__", {})
+            }
 
         def model_dump(self) -> dict:  # pragma: no cover - compatibility helper
             return self.dict()
@@ -86,6 +91,7 @@ except ImportError:  # pragma: no cover
             if isinstance(obj, dict):
                 return cls(**obj)
             return cls.from_orm(obj)
+
 
 EmailStrType: TypeAlias = EmailStr  # type: ignore[misc]
 
@@ -458,7 +464,9 @@ def build_transcription_detail(
     if duration is None:
         duration = getattr(transcription, "duration", None)
     runtime = getattr(transcription, "runtime_seconds", None)
-    debug_event_payloads = _ensure_dict_list(getattr(transcription, "debug_events", None))
+    debug_event_payloads = _ensure_dict_list(
+        getattr(transcription, "debug_events", None)
+    )
     debug_events = [DebugEvent.model_validate(item) for item in debug_event_payloads]
     segments_raw = getattr(transcription, "segments", None)
     if not segments_raw:
@@ -490,13 +498,16 @@ def build_transcription_detail(
         output_folder=getattr(transcription, "output_folder", None),
         premium_enabled=getattr(transcription, "premium_enabled", None),
         premium_notes=getattr(transcription, "premium_notes", None),
-        premium_perks=_ensure_string_list(getattr(transcription, "premium_perks", None)),
+        premium_perks=_ensure_string_list(
+            getattr(transcription, "premium_perks", None)
+        ),
         error_message=getattr(transcription, "error_message", None),
         debug_events=debug_events,
         tags=tags,
         original_filename=getattr(transcription, "original_filename", None),
         stored_path=getattr(transcription, "stored_path", None),
-        audio_key=getattr(transcription, "audio_key", None) or getattr(transcription, "stored_path", None),
+        audio_key=getattr(transcription, "audio_key", None)
+        or getattr(transcription, "stored_path", None),
         transcript_key=getattr(transcription, "transcript_key", None),
         transcript_path=getattr(transcription, "transcript_path", None),
         transcript_url=transcript_url,
