@@ -231,7 +231,9 @@ def test_transcribe_falls_back_to_faster_whisper(monkeypatch, tmp_path):
     fake_whisperx = types.SimpleNamespace(
         load_model=failing_load_model,
         asr=types.SimpleNamespace(DEFAULT_ASR_OPTIONS={}),
-        vad=types.SimpleNamespace(load_vad_model=lambda *a, **k: None, VAD_SEGMENTATION_URL="http://old"),
+        vad=types.SimpleNamespace(
+            load_vad_model=lambda *a, **k: None, VAD_SEGMENTATION_URL="http://old"
+        ),
         DiarizationPipeline=lambda **kwargs: None,
         load_audio=lambda path: [],
         assign_word_speakers=lambda diarize_segments, segments: segments,
@@ -239,7 +241,9 @@ def test_transcribe_falls_back_to_faster_whisper(monkeypatch, tmp_path):
 
     monkeypatch.setitem(sys.modules, "faster_whisper", fake_fw)
     monkeypatch.setitem(sys.modules, "faster_whisper.transcribe", fake_transcribe)
-    monkeypatch.setattr(whisper_service, "FasterWhisperModel", FakeFWModel, raising=False)
+    monkeypatch.setattr(
+        whisper_service, "FasterWhisperModel", FakeFWModel, raising=False
+    )
     monkeypatch.setattr(whisper_service, "whisperx", fake_whisperx, raising=False)
     monkeypatch.setattr(whisper_service, "torch", None, raising=False)
 
@@ -304,11 +308,15 @@ def test_vad_network_error_triggers_fallback(monkeypatch, tmp_path):
     def failing_loader(*args, **kwargs):
         raise URLError("temporary failure")
 
-    fake_vad = types.SimpleNamespace(load_vad_model=failing_loader, VAD_SEGMENTATION_URL="https://example")
+    fake_vad = types.SimpleNamespace(
+        load_vad_model=failing_loader, VAD_SEGMENTATION_URL="https://example"
+    )
 
     fake_whisperx = types.SimpleNamespace(
         vad=fake_vad,
-        asr=types.SimpleNamespace(DEFAULT_ASR_OPTIONS={}, load_vad_model=failing_loader),
+        asr=types.SimpleNamespace(
+            DEFAULT_ASR_OPTIONS={}, load_vad_model=failing_loader
+        ),
         DiarizationPipeline=lambda **kwargs: None,
         load_audio=lambda path: [],
         assign_word_speakers=lambda diarize_segments, segments: segments,
@@ -326,7 +334,9 @@ def test_vad_network_error_triggers_fallback(monkeypatch, tmp_path):
 
     monkeypatch.setitem(sys.modules, "faster_whisper", fake_fw)
     monkeypatch.setitem(sys.modules, "faster_whisper.transcribe", fake_transcribe)
-    monkeypatch.setattr(whisper_service, "FasterWhisperModel", FakeFWModel, raising=False)
+    monkeypatch.setattr(
+        whisper_service, "FasterWhisperModel", FakeFWModel, raising=False
+    )
     monkeypatch.setattr(whisper_service, "whisperx", fake_whisperx, raising=False)
     monkeypatch.setattr(whisper_service, "torch", None, raising=False)
 
@@ -385,13 +395,23 @@ def test_faster_whisper_retries_without_vad(monkeypatch, tmp_path):
 
     monkeypatch.setitem(sys.modules, "faster_whisper", fake_fw)
     monkeypatch.setitem(sys.modules, "faster_whisper.transcribe", fake_fw.transcribe)
-    monkeypatch.setattr(whisper_service, "FasterWhisperModel", FakeFWModel, raising=False)
+    monkeypatch.setattr(
+        whisper_service, "FasterWhisperModel", FakeFWModel, raising=False
+    )
     monkeypatch.setattr(whisper_service, "torch", None, raising=False)
 
-    monkeypatch.setattr(whisper_service.settings, "whisper_language", "es", raising=False)
-    monkeypatch.setattr(whisper_service.settings, "whisper_compute_type", "int8", raising=False)
-    monkeypatch.setattr(whisper_service.settings, "whisper_device", "cpu", raising=False)
-    monkeypatch.setattr(whisper_service.settings, "models_cache_dir", tmp_path, raising=False)
+    monkeypatch.setattr(
+        whisper_service.settings, "whisper_language", "es", raising=False
+    )
+    monkeypatch.setattr(
+        whisper_service.settings, "whisper_compute_type", "int8", raising=False
+    )
+    monkeypatch.setattr(
+        whisper_service.settings, "whisper_device", "cpu", raising=False
+    )
+    monkeypatch.setattr(
+        whisper_service.settings, "models_cache_dir", tmp_path, raising=False
+    )
 
     audio_path = tmp_path / "demo.wav"
     audio_path.write_bytes(b"fake")
@@ -410,7 +430,9 @@ def test_faster_whisper_retries_without_vad(monkeypatch, tmp_path):
 
 
 def test_request_model_preparation_tracks_progress(monkeypatch):
-    monkeypatch.setattr(whisper_service.settings, "enable_dummy_transcriber", True, raising=False)
+    monkeypatch.setattr(
+        whisper_service.settings, "enable_dummy_transcriber", True, raising=False
+    )
     whisper_service._transcriber_cache.clear()
     whisper_service._model_progress.clear()
     whisper_service._model_futures.clear()
@@ -441,11 +463,21 @@ def test_model_preparation_falls_back_when_vad_requires_auth(monkeypatch):
             if progress_callback:
                 progress_callback(100, "fallback listo")
 
-    monkeypatch.setattr(whisper_service, "prepare_transcriber", failing_prepare, raising=False)
-    monkeypatch.setattr(whisper_service, "FasterWhisperTranscriber", FakeFallback, raising=False)
-    monkeypatch.setattr(whisper_service.settings, "enable_dummy_transcriber", False, raising=False)
-    monkeypatch.setattr(whisper_service.settings, "whisper_model_size", "tiny", raising=False)
-    monkeypatch.setattr(whisper_service.settings, "whisper_device", "cpu", raising=False)
+    monkeypatch.setattr(
+        whisper_service, "prepare_transcriber", failing_prepare, raising=False
+    )
+    monkeypatch.setattr(
+        whisper_service, "FasterWhisperTranscriber", FakeFallback, raising=False
+    )
+    monkeypatch.setattr(
+        whisper_service.settings, "enable_dummy_transcriber", False, raising=False
+    )
+    monkeypatch.setattr(
+        whisper_service.settings, "whisper_model_size", "tiny", raising=False
+    )
+    monkeypatch.setattr(
+        whisper_service.settings, "whisper_device", "cpu", raising=False
+    )
 
     whisper_service._transcriber_cache.clear()
     whisper_service._model_progress.clear()
@@ -482,11 +514,21 @@ def test_model_preparation_handles_legacy_hf_error_message(monkeypatch):
             if progress_callback:
                 progress_callback(100, "fallback listo")
 
-    monkeypatch.setattr(whisper_service, "prepare_transcriber", failing_prepare, raising=False)
-    monkeypatch.setattr(whisper_service, "FasterWhisperTranscriber", FakeFallback, raising=False)
-    monkeypatch.setattr(whisper_service.settings, "enable_dummy_transcriber", False, raising=False)
-    monkeypatch.setattr(whisper_service.settings, "whisper_model_size", "tiny", raising=False)
-    monkeypatch.setattr(whisper_service.settings, "whisper_device", "cpu", raising=False)
+    monkeypatch.setattr(
+        whisper_service, "prepare_transcriber", failing_prepare, raising=False
+    )
+    monkeypatch.setattr(
+        whisper_service, "FasterWhisperTranscriber", FakeFallback, raising=False
+    )
+    monkeypatch.setattr(
+        whisper_service.settings, "enable_dummy_transcriber", False, raising=False
+    )
+    monkeypatch.setattr(
+        whisper_service.settings, "whisper_model_size", "tiny", raising=False
+    )
+    monkeypatch.setattr(
+        whisper_service.settings, "whisper_device", "cpu", raising=False
+    )
 
     whisper_service._transcriber_cache.clear()
     whisper_service._model_progress.clear()

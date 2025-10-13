@@ -172,7 +172,9 @@ class AudioRing:
     def end(self) -> float:
         return self.start + self.duration
 
-    def export_window(self, start_time: float, destination: Path) -> Tuple[Path, float, float]:
+    def export_window(
+        self, start_time: float, destination: Path
+    ) -> Tuple[Path, float, float]:
         if len(self._audio) <= 0:
             raise ValueError("No hay audio en el búfer para exportar")
         actual_start = max(start_time, self.start)
@@ -227,7 +229,9 @@ class LiveSessionState:
     last_duration: Optional[float] = None
     last_runtime: Optional[float] = None
     segments: List[dict] = field(default_factory=list)
-    ring: AudioRing = field(default_factory=lambda: AudioRing(LIVE_RING_DURATION_SECONDS))
+    ring: AudioRing = field(
+        default_factory=lambda: AudioRing(LIVE_RING_DURATION_SECONDS)
+    )
     last_t_end: float = 0.0
     user_dictionary: Set[str] = field(default_factory=set)
     suspects: List[Tuple[float, float]] = field(default_factory=list)
@@ -300,7 +304,11 @@ def _resolve_device_choice(value: Optional[str]) -> str:
     if resolved in {"cuda", "cpu"}:
         return resolved
 
-    logger.warning("Dispositivo %s no reconocido; se usará %s", value, "GPU" if cuda_available else "CPU")
+    logger.warning(
+        "Dispositivo %s no reconocido; se usará %s",
+        value,
+        "GPU" if cuda_available else "CPU",
+    )
     return "cuda" if cuda_available else "cpu"
 
 
@@ -403,7 +411,9 @@ def _transcription_to_srt(transcription: Transcription) -> str:
             entries.append(entry)
     else:
         body = transcription.text or ""
-        paragraphs = [paragraph.strip() for paragraph in body.split("\n") if paragraph.strip()]
+        paragraphs = [
+            paragraph.strip() for paragraph in body.split("\n") if paragraph.strip()
+        ]
         if not paragraphs:
             paragraphs = [body.strip() or "Transcripción en proceso"]
         for index, paragraph in enumerate(paragraphs, start=1):
@@ -433,7 +443,9 @@ def _transcription_to_srt(transcription: Transcription) -> str:
     return "\n".join(entries).strip() + "\n"
 
 
-def _merge_live_chunk(state: LiveSessionState, chunk_path: Path) -> Optional[AudioSegment]:
+def _merge_live_chunk(
+    state: LiveSessionState, chunk_path: Path
+) -> Optional[AudioSegment]:
     try:
         fmt = _guess_audio_format(chunk_path)
         if fmt:
@@ -523,7 +535,9 @@ def _enqueue_transcription(
         )
     _validate_upload_size(upload)
     if not destination_folder or not destination_folder.strip():
-        raise HTTPException(status_code=400, detail="Debes indicar una carpeta de destino")
+        raise HTTPException(
+            status_code=400, detail="Debes indicar una carpeta de destino"
+        )
     sanitized_folder = sanitize_folder_name(destination_folder)
     resolved_model = _resolve_model_choice(model_size)
     resolved_device = _resolve_device_choice(device_preference)
@@ -584,7 +598,9 @@ def _enqueue_transcription(
     return transcription
 
 
-@router.post("/live/sessions", response_model=LiveSessionCreateResponse, status_code=201)
+@router.post(
+    "/live/sessions", response_model=LiveSessionCreateResponse, status_code=201
+)
 def create_live_session(payload: LiveSessionCreateRequest) -> LiveSessionCreateResponse:
     purge_expired_live_sessions()
     session_id = secrets.token_urlsafe(12)
@@ -612,7 +628,9 @@ def create_live_session(payload: LiveSessionCreateRequest) -> LiveSessionCreateR
 
 
 @router.post("/live/sessions/{session_id}/chunk", response_model=LiveChunkResponse)
-def push_live_chunk(session_id: str, chunk: UploadFile = File(...)) -> LiveChunkResponse:
+def push_live_chunk(
+    session_id: str, chunk: UploadFile = File(...)
+) -> LiveChunkResponse:
     purge_expired_live_sessions()
     state = _require_live_session(session_id)
     data = chunk.file.read()
@@ -689,6 +707,7 @@ def push_live_chunk(session_id: str, chunk: UploadFile = File(...)) -> LiveChunk
             "log_prob_threshold": settings.whisper_log_prob_threshold,
         }
         decode_options = {k: v for k, v in decode_options_raw.items() if v is not None}
+
         def _transcribe_live(current_transcriber: BaseTranscriber):
             return current_transcriber.transcribe(
                 window_path,
@@ -780,8 +799,12 @@ def push_live_chunk(session_id: str, chunk: UploadFile = File(...)) -> LiveChunk
 
         appended_text = " ".join(appended_parts).strip() or None
         if appended_text:
-            state.last_text = " ".join(segment.get("text", "").strip() for segment in state.segments).strip()
-        state.last_duration = max(state.last_duration or 0.0, window_end, state.last_t_end)
+            state.last_text = " ".join(
+                segment.get("text", "").strip() for segment in state.segments
+            ).strip()
+        state.last_duration = max(
+            state.last_duration or 0.0, window_end, state.last_t_end
+        )
         state.last_runtime = result.runtime_seconds
         state.language = result.language or state.language
         state.last_activity = time.time()
@@ -802,7 +825,9 @@ def push_live_chunk(session_id: str, chunk: UploadFile = File(...)) -> LiveChunk
     )
 
 
-@router.post("/live/sessions/{session_id}/finalize", response_model=LiveFinalizeResponse)
+@router.post(
+    "/live/sessions/{session_id}/finalize", response_model=LiveFinalizeResponse
+)
 def finalize_live_session(
     session_id: str,
     payload: LiveFinalizeRequest,
@@ -811,10 +836,14 @@ def finalize_live_session(
     state = _require_live_session(session_id)
     with state.lock:
         if not state.audio_path.exists():
-            raise HTTPException(status_code=400, detail="No se capturó audio en la sesión en vivo")
+            raise HTTPException(
+                status_code=400, detail="No se capturó audio en la sesión en vivo"
+            )
         state.last_activity = time.time()
         resolved_model = _resolve_model_choice(payload.model_size or state.model_size)
-        resolved_device = _resolve_device_choice(payload.device_preference or state.device)
+        resolved_device = _resolve_device_choice(
+            payload.device_preference or state.device
+        )
         resolved_language = payload.language or state.language
         if payload.beam_size is not None:
             state.beam_size = payload.beam_size
@@ -984,7 +1013,9 @@ def create_transcription(
     upload: UploadFile = File(...),
     language: Optional[str] = Form(default=None),
     subject: Optional[str] = Form(default=None),
-    destination_folder: str = Form(..., description="Carpeta obligatoria dentro de transcripts_dir"),
+    destination_folder: str = Form(
+        ..., description="Carpeta obligatoria dentro de transcripts_dir"
+    ),
     model_size: Optional[str] = Form(default=None),
     device_preference: Optional[str] = Form(default=None),
     beam_size: Annotated[Optional[int], Form()] = None,
@@ -1022,7 +1053,9 @@ def create_batch_transcriptions(
     session: Session = Depends(_get_session),
 ) -> BatchTranscriptionCreateResponse:
     if not uploads:
-        raise HTTPException(status_code=400, detail="Debes adjuntar al menos un archivo")
+        raise HTTPException(
+            status_code=400, detail="Debes adjuntar al menos un archivo"
+        )
 
     responses: List[TranscriptionCreateResponse] = []
     for upload in uploads:
@@ -1059,14 +1092,22 @@ def process_transcription(
     resolved_device = _resolve_device_choice(device_preference)
     transcriber = get_transcriber(resolved_model, resolved_device)
 
-    def debug_callback(stage: str, message: str, extra: Optional[Dict[str, object]], level: str = "info") -> None:
+    def debug_callback(
+        stage: str,
+        message: str,
+        extra: Optional[Dict[str, object]],
+        level: str = "info",
+    ) -> None:
         append_debug_event(transcription_id, stage, message, extra=extra, level=level)
         if stage == "transcribe.segment" and extra:
             partial_text = str(extra.get("partial_text") or "").strip()
             if partial_text:
                 with get_session() as update_session:
                     partial = update_session.get(Transcription, transcription_id)
-                    if partial is not None and (partial.text or "").strip() != partial_text:
+                    if (
+                        partial is not None
+                        and (partial.text or "").strip() != partial_text
+                    ):
                         partial.text = partial_text
                         update_session.commit()
 
@@ -1099,9 +1140,7 @@ def process_transcription(
         assert stored_path is not None
         audio_path = Path(stored_path)
         if not audio_path.exists():
-            message = (
-                "El archivo original ya no está disponible; la transcripción se canceló o eliminó."
-            )
+            message = "El archivo original ya no está disponible; la transcripción se canceló o eliminó."
             with get_session() as session:
                 transcription = session.get(Transcription, transcription_id)
                 if transcription is not None:
@@ -1150,6 +1189,7 @@ def process_transcription(
             "log_prob_threshold": settings.whisper_log_prob_threshold,
         }
         decode_options = {k: v for k, v in decode_options_raw.items() if v is not None}
+
         def _normalize_device_label(value: Optional[str], fallback: str) -> str:
             normalized = (value or "").strip().lower()
             if normalized in {"cuda", "gpu"}:
@@ -1173,7 +1213,9 @@ def process_transcription(
                     return default_label
             return default_label
 
-        def _transcribe_once(current_transcriber: BaseTranscriber) -> TranscriptionResult:
+        def _transcribe_once(
+            current_transcriber: BaseTranscriber,
+        ) -> TranscriptionResult:
             return current_transcriber.transcribe(
                 normalized_audio,
                 language or transcription.language,
@@ -1316,7 +1358,9 @@ def list_transcriptions(
 
 
 @router.get("/{transcription_id}", response_model=TranscriptionDetail)
-def get_transcription(transcription_id: int, session: Session = Depends(_get_session)) -> TranscriptionDetail:
+def get_transcription(
+    transcription_id: int, session: Session = Depends(_get_session)
+) -> TranscriptionDetail:
     transcription = _get_transcription_or_404(session, transcription_id)
     transcript_key = getattr(transcription, "transcript_key", None)
     presigned_url = None
@@ -1373,7 +1417,9 @@ def download_transcription_logs(
 
 
 @router.get("/{transcription_id}/download")
-def download_transcription(transcription_id: int, session: Session = Depends(_get_session)) -> FileResponse:
+def download_transcription(
+    transcription_id: int, session: Session = Depends(_get_session)
+) -> FileResponse:
     transcription = _get_transcription_or_404(session, transcription_id)
     txt_path = (
         Path(transcription.transcript_path)
@@ -1420,7 +1466,9 @@ def download_transcription_srt(
 
 
 @router.delete("/{transcription_id}", status_code=204, response_class=Response)
-def delete_transcription(transcription_id: int, session: Session = Depends(_get_session)) -> Response:
+def delete_transcription(
+    transcription_id: int, session: Session = Depends(_get_session)
+) -> Response:
     transcription = session.get(Transcription, transcription_id)
     if not transcription:
         raise HTTPException(status_code=404, detail="Transcripción no encontrada")

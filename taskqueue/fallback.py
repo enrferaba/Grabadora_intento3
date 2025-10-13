@@ -64,7 +64,9 @@ class InMemoryJob:
     # RQ-style helpers ------------------------------------------------------
     def refresh(self) -> None:
         if not self._thread.is_alive() and self._status == "started":
-            self._status = "failed" if self.meta.get("status") == "failed" else "finished"
+            self._status = (
+                "failed" if self.meta.get("status") == "failed" else "finished"
+            )
 
     def get_status(self, refresh: bool = True) -> str:
         if refresh:
@@ -93,7 +95,9 @@ class InMemoryJob:
             self.meta["status"] = "failed"
             self.meta.setdefault("error_message", str(exc))
         finally:
-            self._status = "failed" if self.meta.get("status") == "failed" else "finished"
+            self._status = (
+                "failed" if self.meta.get("status") == "failed" else "finished"
+            )
             tasks.clear_current_job()
 
 
@@ -104,7 +108,9 @@ class InMemoryQueue:
         self.name = name
         self.connection = connection or InMemoryRedis()
 
-    def enqueue(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> InMemoryJob:
+    def enqueue(
+        self, func: Callable[..., Any], *args: Any, **kwargs: Any
+    ) -> InMemoryJob:
         meta = kwargs.pop("meta", None)
         job_timeout = kwargs.pop("job_timeout", None)
         result_ttl = kwargs.pop("result_ttl", None)

@@ -5,13 +5,15 @@ from taskqueue.fallback import InMemoryQueue, InMemoryRedis, drain_completed_job
 
 
 def test_inmemory_queue_executes_jobs_and_updates_meta():
-    queue = InMemoryQueue("default", connection=InMemoryRedis.from_url("memory://tests"))
+    queue = InMemoryQueue(
+        "default", connection=InMemoryRedis.from_url("memory://tests")
+    )
 
     def sample_job() -> None:
         job = tasks.get_current_job()
         assert job is not None
         job.meta["status"] = "completed"
-        job.meta["last_token"] = "{\"text\":\"hola\"}"
+        job.meta["last_token"] = '{"text":"hola"}'
         job.save_meta()
 
     job = queue.enqueue(sample_job)
