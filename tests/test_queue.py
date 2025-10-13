@@ -30,9 +30,7 @@ class DummyTranscriber:
             token_callback({"text": " ", "t0": 1.0, "t1": 2.0, "segment": 1})
         return {
             "text": "Hello world",
-            "segments": [
-                {"start": 0, "end": 1, "text": "Hello world"}
-            ],
+            "segments": [{"start": 0, "end": 1, "text": "Hello world"}],
             "language": language or "en",
             "duration": 1.0,
         }
@@ -50,7 +48,9 @@ class DummyJob:
 @pytest.fixture(autouse=True)
 def patch_dependencies(monkeypatch):
     monkeypatch.setattr("taskqueue.tasks.S3StorageClient", lambda: DummyStorage())
-    monkeypatch.setattr("taskqueue.tasks.TranscriptionService", lambda **kwargs: DummyTranscriber())
+    monkeypatch.setattr(
+        "taskqueue.tasks.TranscriptionService", lambda **kwargs: DummyTranscriber()
+    )
     job = DummyJob()
     monkeypatch.setattr("taskqueue.tasks.get_current_job", lambda: job)
 

@@ -56,7 +56,9 @@ def print_report(statuses: Iterable[ModuleStatus]) -> int:
     if ffmpeg_path:
         print(f"ffmpeg: {ffmpeg_path}")
     else:
-        print("ffmpeg: no encontrado en el PATH (instala FFmpeg o coloca el binario junto a la app)")
+        print(
+            "ffmpeg: no encontrado en el PATH (instala FFmpeg o coloca el binario junto a la app)"
+        )
 
     if not missing:
         print()
@@ -71,7 +73,9 @@ def print_report(statuses: Iterable[ModuleStatus]) -> int:
         return 0
 
     print()
-    print("Faltan dependencias de Python. Activa tu entorno virtual e instala los requisitos:")
+    print(
+        "Faltan dependencias de Python. Activa tu entorno virtual e instala los requisitos:"
+    )
     print("  python -m venv .venv")
     if platform.system() == "Windows":
         print("  .\\.venv\\Scripts\\activate")

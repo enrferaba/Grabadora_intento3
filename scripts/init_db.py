@@ -4,7 +4,9 @@ try:
     import app.compat  # noqa: F401  # aplica los parches de compatibilidad antes de otras importaciones
     from app.database import Base, get_session, sync_engine
     from app.models import PricingTier
-except ModuleNotFoundError as exc:  # pragma: no cover - depende del entorno del usuario final
+except (
+    ModuleNotFoundError
+) as exc:  # pragma: no cover - depende del entorno del usuario final
     missing = exc.name or ""
     instructions = [
         "No se pudieron importar las dependencias necesarias para inicializar la base de datos.",
