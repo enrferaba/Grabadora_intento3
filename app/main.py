@@ -26,6 +26,7 @@ try:  # pragma: no cover - optional dependency
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
     from fastapi.staticfiles import StaticFiles
+    from starlette.middleware import Middleware
     from starlette.requests import ClientDisconnect
 except ImportError:  # pragma: no cover
     FastAPI = None  # type: ignore
@@ -83,6 +84,10 @@ except ImportError:  # pragma: no cover
     class CORSMiddleware:  # type: ignore
         def __init__(self, *args, **kwargs) -> None:
             raise RuntimeError("FastAPI is required for CORS middleware")
+
+    class Middleware:  # type: ignore
+        def __init__(self, *args, **kwargs) -> None:
+            raise RuntimeError("FastAPI is required for middleware")
 
     class ClientDisconnect(Exception):  # type: ignore
         pass
@@ -262,7 +267,7 @@ def _configure_cors(app_obj: Any, settings: Any) -> None:
         mw for mw in app_obj.user_middleware if mw.cls is not CORSMiddleware
     ]
     if cors_kwargs:
-        app_obj.add_middleware(CORSMiddleware, **cors_kwargs)
+        app_obj.user_middleware.append(Middleware(CORSMiddleware, **cors_kwargs))
     app_obj.state.frontend_origin = settings.frontend_origin
     app_obj.state.frontend_origin_regex = settings.frontend_origin_regex
     app_obj.middleware_stack = app_obj.build_middleware_stack()

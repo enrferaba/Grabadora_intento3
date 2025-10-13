@@ -37,7 +37,7 @@ npm install
 cd ..
 ```
 
-> Si olvidas actualizar `GRABADORA_JWT_SECRET_KEY` en `.env`, `python ejecutar.py` generará un secreto aleatorio y lo guardará automáticamente para los siguientes arranques.
+> Si dejas `GRABADORA_JWT_SECRET_KEY` con el placeholder en `.env` o `.env.local`, `python ejecutar.py` generará un secreto aleatorio y lo guardará automáticamente para los siguientes arranques.
 
 ## 2. Uso de `doctor.py`
 
@@ -101,7 +101,7 @@ docker compose up --build
 docker compose --profile queue up --build
 ```
 
-> Nota: El archivo `docker-compose.yml` carga `.env.example` por defecto. Si copias tus credenciales a `.env`, exporta `GRABADORA_ENV_FILE=.env` (PowerShell: `$env:GRABADORA_ENV_FILE='.env'`) antes de ejecutar `docker compose` para que el contenedor use ese archivo.
+> Nota: El repositorio trae un `.env` básico que apunta a `.env.example`, así que `docker compose up --build` funciona sin pasos previos. Para credenciales propias crea `.env.local` (git lo ignora), ajústalo y cambia `GRABADORA_ENV_FILE=.env.local` en `.env` o exporta `GRABADORA_ENV_FILE=.env.local` antes de levantar los contenedores.
 
 El perfil por defecto levanta API (8000), frontend en Vite (5173), Redis, PostgreSQL y MinIO. Comprueba los healthchecks con `docker compose ps` y espera a ver `healthy` antes de probar.
 

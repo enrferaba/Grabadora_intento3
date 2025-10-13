@@ -24,8 +24,18 @@ def _collect_env(prefix: str = ENV_PREFIX) -> dict[str, Any]:
     """Load .env + OS variables and normalise keys."""
 
     raw: dict[str, Any] = {}
-    sources = [dotenv_values(".env"), os.environ]
-    for source in sources:
+    env_sources: list[dict[str, Any]] = []
+    env_files = [".env.example", ".env", ".env.local"]
+    # Allow explicit override of the env file path for compose/docker flows.
+    override_env_file = os.environ.get(f"{prefix}ENV_FILE") or os.environ.get(
+        "GRABADORA_ENV_FILE",
+    )
+    if override_env_file and override_env_file not in env_files:
+        env_files.append(override_env_file)
+    for env_file in env_files:
+        env_sources.append(dotenv_values(env_file))
+    env_sources.append(os.environ)
+    for source in env_sources:
         for key, value in source.items():
             if value in (None, ""):
                 continue
@@ -215,14 +225,13 @@ def _attempt_auto_secret(settings: Settings) -> bool:
 
 
 def _persist_secret_to_env(secret: str) -> None:
-    """Write the generated secret back to `.env` when possible."""
+    """Write the generated secret to a developer override env file when possible."""
 
     env_path = Path(".env")
     try:
-        if env_path.exists():
-            contents = env_path.read_text(encoding="utf-8")
-        else:
-            contents = ""
+        env_contents = env_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        env_contents = ""
     except UnicodeDecodeError:
         print(
             "⚠️  No se pudo actualizar .env con el secreto generado (codificación no UTF-8). "
@@ -230,10 +239,62 @@ def _persist_secret_to_env(secret: str) -> None:
         )
         return
 
+    env_file_key = f"{ENV_PREFIX}ENV_FILE"
+    pointer: str | None = None
+    updated_env_lines: list[str] = []
+    for line in env_contents.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            updated_env_lines.append(line)
+            continue
+        key, sep, value = line.partition("=")
+        if sep != "=":
+            updated_env_lines.append(line)
+            continue
+        key_upper = key.strip().upper()
+        if key_upper == env_file_key:
+            pointer = value.strip() or ".env.local"
+            if pointer == ".env.example":
+                pointer = ".env.local"
+            updated_env_lines.append(f"{env_file_key}={pointer}")
+        else:
+            updated_env_lines.append(line)
+
+    if pointer is None:
+        pointer = ".env.local"
+        if updated_env_lines and updated_env_lines[-1] != "":
+            updated_env_lines.append("")
+        updated_env_lines.append(f"{env_file_key}={pointer}")
+
+    new_env_content = "\n".join(updated_env_lines).rstrip() + "\n"
+    try:
+        env_path.write_text(new_env_content, encoding="utf-8")
+    except OSError as exc:
+        print(
+            "⚠️  No se pudo escribir el archivo .env actualizado:",
+            exc,
+        )
+        pointer = None
+
+    if pointer is None:
+        return
+
+    os.environ.setdefault(env_file_key, pointer)
+
+    target_path = Path(pointer)
+    try:
+        target_contents = target_path.read_text(encoding="utf-8") if target_path.exists() else ""
+    except UnicodeDecodeError:
+        print(
+            f"⚠️  No se pudo actualizar {pointer} con el secreto generado (codificación no UTF-8). "
+            "Actualízalo manualmente.",
+        )
+        return
+
     target_keys = ("GRABADORA_JWT_SECRET_KEY", "JWT_SECRET", "JWT_SECRET_KEY")
     updated_lines: list[str] = []
     seen: set[str] = set()
-    for line in contents.splitlines():
+    for line in target_contents.splitlines():
         stripped = line.strip()
         if not stripped or stripped.startswith("#"):
             updated_lines.append(line)
@@ -255,10 +316,12 @@ def _persist_secret_to_env(secret: str) -> None:
 
     new_content = "\n".join(updated_lines).rstrip() + "\n"
     try:
-        env_path.write_text(new_content, encoding="utf-8")
+        target_path.write_text(new_content, encoding="utf-8")
     except OSError as exc:
         print(
-            "⚠️  No se pudo escribir el nuevo GRABADORA_JWT_SECRET_KEY en .env:",
+            "⚠️  No se pudo escribir el nuevo GRABADORA_JWT_SECRET_KEY en",
+            target_path,
+            ":",
             exc,
         )
         return
