@@ -107,14 +107,15 @@
 
 ### 4.2 Ejecución local sin Docker
 1. Crear entorno virtual con Python 3.11+: `python3.11 -m venv .venv && source .venv/bin/activate`.
-2. Instalar dependencias backend: `pip install -r requirements.txt` (o `poetry install`).
-   * El archivo principal incluye la pila de ML (`faster-whisper`, `whisperx`, `torch`).
-   * Para un arranque ligero (sin modelos), puedes usar `pip install -r requirements/base.txt`.
+2. Instalar dependencias backend: `pip install -r requirements/base.txt`.
+   * Añade `pip install -r requirements/ml.txt` cuando necesites la pila de transcripción completa (CUDA/CPU potente).
+   * En Windows, si encuentras errores compilando PyAV al instalar la pila ML, usa Docker/WSL o instala las dependencias nativas de FFmpeg antes de repetir.
+   * `poetry install` sigue disponible si prefieres gestionar el entorno con Poetry.
 3. Valida entorno y puertos libres: `python doctor.py --mode local --install-missing --fix-frontend`.
 4. Ejecuta migraciones si usas PostgreSQL: `alembic upgrade head`. En modo local sin DB externa se usará SQLite automáticamente.
 5. Arranca el backend: `uvicorn app.main:app --reload --host 0.0.0.0 --port 8000`.
 6. En otra terminal, sirve la SPA: `cd frontend && npm install && npm run dev -- --host 0.0.0.0 --port 5173`.
-7. (Opcional) Worker dedicado: `rq worker transcription --url $GRABADORA_REDIS_URL` o deja que el backend use la cola en memoria.
+7. (Opcional) Worker dedicado: `rq worker transcription --url $GRABADORA_REDIS_URL` (en PowerShell usa `$env:GRABADORA_REDIS_URL`). Si no configuras Redis, el backend recurre a la cola en memoria.
 
 ### 4.3 Sembrar un usuario administrador en local
 

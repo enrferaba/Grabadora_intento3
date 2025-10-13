@@ -1,144 +1,109 @@
-# ejecutar.py y guías de arranque
+# Guía rápida de ejecución
 
-Este documento explica cómo verificar el entorno, arrancar la plataforma y resolver los fallos más habituales en Windows PowerShell y en shells POSIX.
+Elige el bloque que corresponda a tu sistema operativo. Todos los comandos asumen que estás en la raíz del repositorio.
 
-## 1. Preparar el entorno
+## Windows (PowerShell)
 
-### 1.1 Requisitos previos
-- Python 3.11 o superior instalado y accesible como `python`/`python3` (Linux/macOS) o `py -3.11` (Windows).
-- Node.js >= 20 LTS y `npm` disponibles en PATH.
-- FFmpeg instalado (`ffmpeg -version`).
-- (Opcional) Docker + Docker Compose v2 para levantar la pila completa.
+1. **Preparar Python y dependencias**
+   ```powershell
+   py -3.11 -m venv .venv
+   .\.venv\Scripts\Activate.ps1
+   pip install -r requirements/base.txt
+   # Para transcribir con modelos grandes usa también (requiere CUDA o CPU potente):
+   # pip install -r requirements/ml.txt
+   ```
 
-### 1.2 Crear y activar el entorno virtual
+   > Si quieres la pila completa (Redis, MinIO, PostgreSQL) usa Docker más abajo; no necesitas instalar `ml.txt` para probar la API básica.
 
-| Sistema | Comando |
-|---------|---------|
-| Linux/macOS | `python3.11 -m venv .venv && source .venv/bin/activate` |
-| Windows PowerShell | `py -3.11 -m venv .venv; .\.venv\Scripts\Activate.ps1` |
+2. **Frontend**
+   ```powershell
+   cd frontend
+   npm install
+   cd ..
+   ```
 
-> Si PowerShell bloquea la activación, ejecuta `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` con permisos de administrador.
+3. **Variables de entorno**
+   Copia `.env.example` a `.env.local` y ajusta lo necesario (por defecto usa SQLite y cola en memoria). El lanzador rellenará un secreto JWT si encuentra el placeholder.
 
-### 1.3 Instalar dependencias
+4. **Arrancar en modo desarrollador**
+   ```powershell
+   python ejecutar.py
+   ```
+   Este comando ejecuta el doctor, crea la base SQLite y lanza `uvicorn` con autoreload. La SPA queda disponible en `http://localhost:5173` si levantas Vite en otra consola:
+   ```powershell
+   cd frontend
+   npm run dev
+   ```
 
-```bash
-pip install -r requirements.txt  # stack completa con modelos
-# Si solo quieres probar la API sin dependencias pesadas:
-# pip install -r requirements/base.txt
-# o con Poetry
-poetry install
-```
+5. **Cola de trabajos (opcional)**
+   Solo si usas Redis: 
+   ```powershell
+   $env:GRABADORA_REDIS_URL="redis://localhost:6379/0"
+   rq worker transcription --url $env:GRABADORA_REDIS_URL
+   ```
+   Si no defines Redis, la aplicación usa una cola en memoria y no necesitas worker.
 
-Luego instala el frontend si vas a recompilar la SPA:
+6. **Docker en Windows**
+   Para evitar compilar dependencias como PyAV en Windows, es recomendable usar Docker (requiere WSL2):
+   ```powershell
+   docker compose up --build
+   ```
+   El compose levanta API, frontend, Redis, PostgreSQL y MinIO. El acceso sigue siendo `http://localhost:8000` (API) y `http://localhost:5173` (frontend).
 
-```bash
-cd frontend
-npm install
-cd ..
-```
+## Linux / WSL / macOS (bash/zsh)
 
-> Si dejas `GRABADORA_JWT_SECRET_KEY` con el placeholder en `.env` o `.env.local`, `python ejecutar.py` generará un secreto aleatorio y lo guardará automáticamente para los siguientes arranques.
+1. **Entorno virtual e instalación**
+   ```bash
+   python3.11 -m venv .venv
+   source .venv/bin/activate
+   pip install -r requirements/base.txt
+   # Para transcribir con modelos completos:
+   # pip install -r requirements/ml.txt
+   ```
 
-## 2. Uso de `doctor.py`
+2. **Frontend**
+   ```bash
+   cd frontend
+   npm install
+   cd ..
+   ```
 
-`python doctor.py` realiza comprobaciones previas al arranque del stack.
+3. **Variables de entorno**
+   ```bash
+   cp .env.example .env.local  # edita si necesitas cambiar rutas o credenciales
+   ```
 
-Parámetros útiles:
-- `--install-missing`: intenta instalar paquetes de Python ausentes dentro del entorno activo.
-- `--fix-frontend`: ejecuta `npm install` en `frontend/` si faltan dependencias.
-- `--mode local|stack`: habilita las comprobaciones de Redis/MinIO/DB cuando usas Docker Compose.
+4. **Arranque local**
+   ```bash
+   python ejecutar.py
+   # En otra terminal (opcional) para la SPA:
+   cd frontend && npm run dev -- --host 0.0.0.0 --port 5173
+   ```
 
-Salida esperada (resumida):
+5. **Worker opcional (Redis)**
+   ```bash
+   export GRABADORA_REDIS_URL=redis://localhost:6379/0
+   rq worker transcription --url "$GRABADORA_REDIS_URL"
+   ```
 
-```
-✅ Intérprete de Python compatible
-✅ Node.js >= 20 LTS
-✅ FFmpeg disponible
-✅ Dependencias de frontend instaladas
-✅ Build de frontend generado
-✅ nvidia-smi disponible
-✅ Puertos disponibles
-```
+6. **Docker Compose**
+   ```bash
+   docker compose up --build
+   ```
+   Usa `docker compose --profile queue up --build` si quieres añadir el worker RQ como contenedor adicional.
 
-Si aparece ❌, sigue la sugerencia mostrada. Casos comunes:
-- **Python 3.9 detectado**: revisa `where python`/`Get-Command python` y ajusta la ruta al `.venv`.
-- **npm no encontrado (Windows)**: reinstala Node.js y vuelve a abrir PowerShell.
-- **Redis/DB/S3 inaccesibles**: revisa que Docker Compose esté corriendo o cambia a `--mode local` para usar los fallbacks.
+## Flujo de prueba
 
-## 3. Ejecutar la API y la SPA
+1. Abre `http://localhost:8000/docs`.
+2. Crea un usuario (`POST /auth/signup`).
+3. Obtén un token (`POST /auth/token`) y pulsa **Authorize** → `Bearer <token>`.
+4. Desde la SPA (o Swagger) sube un audio y verifica que llega la transcripción. Si S3/MinIO no está disponible, el backend guardará los archivos en `./data/`.
+5. Ejecuta `python scripts/seed_dev.py` para crear un usuario demo rápidamente si lo prefieres.
 
-### 3.1 Modo local (sin Docker)
+## Problemas habituales
 
-1. Activa el entorno virtual (`source .venv/bin/activate`).
-2. Arranca la API en modo recarga: `uvicorn app.main:app --reload --host 0.0.0.0 --port 8000`.
-3. En otra terminal, levanta la SPA: `cd frontend && npm run dev -- --host 0.0.0.0 --port 5173`.
-4. Opcional: usa `python ejecutar.py` si prefieres un comando único que ejecuta `doctor.py` y uvicorn con las banderas adecuadas.
+- **`rq worker` dice que falta `--url`**: en PowerShell usa `$env:VARIABLE`, no `$VARIABLE`.
+- **Error compilando PyAV en Windows**: usa Docker o WSL; la imagen oficial ya incluye FFmpeg y las cabeceras necesarias.
+- **`docker compose up` pide `.env`**: el repositorio incluye un `.env` mínimo que apunta a `.env.example`. Crea `.env.local` para credenciales reales y exporta `GRABADORA_ENV_FILE=.env.local` si quieres que Compose lo cargue.
 
-URLs locales:
-```
-SPA           http://localhost:5173/
-Docs API      http://localhost:8000/docs
-Healthcheck   http://localhost:8000/healthz
-```
-
-> Si `/docs` carga pero `POST /transcribe` devuelve 405, revisa que la solicitud sea `multipart/form-data` y que `python-multipart` esté instalado.
-
-### 3.2 Levantar el worker
-
-En otra terminal, con el mismo entorno activo:
-
-```bash
-rq worker transcription --url $GRABADORA_REDIS_URL
-```
-
-Si no tienes Redis, activa el backend en memoria estableciendo `GRABADORA_QUEUE_BACKEND=memory` o dejando que el código lo seleccione automáticamente (verifica logs: “Using in-memory queue backend”).
-
-### 3.3 Docker Compose
-
-```bash
-docker compose up --build
-# Para añadir el worker en segundo plano:
-docker compose --profile queue up --build
-```
-
-> ⚠️ Usa `--build` con dos guiones. El atajo `-build` muestra `unknown shorthand flag: 'b'` en Compose v2.
-
-> Nota: El repositorio trae un `.env` básico que apunta a `.env.example`, así que `docker compose up --build` funciona sin pasos previos. Para credenciales propias crea `.env.local` (git lo ignora), ajústalo y cambia `GRABADORA_ENV_FILE=.env.local` en `.env` o exporta `GRABADORA_ENV_FILE=.env.local` antes de levantar los contenedores.
-
-El perfil por defecto levanta API (8000), frontend en Vite (5173), Redis, PostgreSQL y MinIO. Comprueba los healthchecks con `docker compose ps` y espera a ver `healthy` antes de probar.
-
-### 3.4 Semilla rápida de un usuario admin
-
-Si quieres saltarte el alta manual en Swagger, ejecuta:
-
-```bash
-python scripts/seed_dev.py  # crea admin@local.com / admin123 si no existe
-```
-
-Usa `--email`, `--password` y `--reset-password` para personalizar la cuenta.
-
-## 4. Pruebas rápidas
-
-1. Abre `http://localhost:5173/` y verifica que la SPA cargue (en producción puede servirse desde la API).
-2. Desde `/docs`, crea un usuario (`POST /auth/signup`), inicia sesión (`POST /auth/token`) y copia el token.
-3. Configura el token en Swagger (botón “Authorize” → `Bearer <token>`).
-4. Lanza `POST /transcribe` subiendo un WAV/MP3 pequeño. Debe responder `job_id`.
-5. Abre `GET /transcribe/{job_id}` desde la SPA o con `curl -N` para confirmar eventos SSE.
-6. Comprueba `GET /transcripts` y descarga `GET /transcripts/{id}/download?format=srt`.
-
-## 5. Solución de problemas frecuentes
-
-| Síntoma | Causa probable | Acción sugerida |
-|---------|----------------|-----------------|
-| `405 Method Not Allowed` en `POST /transcribe` | Solicitud enviada como JSON o falta `python-multipart`. | Ajusta el cliente a `multipart/form-data` y reinstala `python-multipart`. |
-| `404 /transcribir` al refrescar la página | Falta fallback SPA en FastAPI. | Revisa que FastAPI devuelva `frontend/dist/index.html` para rutas desconocidas. |
-| `typing-extensions` conflicto con Pydantic 2.12 | Versión 4.11 instalada. | Ejecuta `pip install typing-extensions>=4.14.1`. |
-| `Falling back to local disk storage...` | MinIO/S3 no disponible. | Documenta el modo local en README y confirma permisos de escritura. |
-| Pantalla completa sin salida visible | UI sin botón de salida. | Añadir botón “Salir de pantalla completa” y atajos en la SPA. |
-| `python doctor.py` usa Python 3.9 de Microsoft Store | Alias global invade el PATH. | Deshabilita App Installer (`winget settings`) y usa `.venv\Scripts\python.exe`. |
-
-## 6. Auditoría rápida del repositorio
-
-Ejecuta `python scripts/revisa_repo.py` desde la raíz para generar `RepoAudit.md` con un checklist de `.env`, Docker Compose y migraciones. Repasa las advertencias antes de abrir un PR o desplegar.
-
-Mantén este archivo actualizado cuando cambien parámetros o banderas de `ejecutar.py`.
+Mantén este archivo a mano y actualízalo cuando cambie el proceso de arranque.
