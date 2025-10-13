@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import os
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Any, Iterator
+from typing import TYPE_CHECKING, Any, Iterator, cast
 
 if TYPE_CHECKING:  # pragma: no cover - import-time typing helpers
     from sqlalchemy.orm import Session as _SessionType
@@ -66,7 +66,15 @@ else:
     _DEFAULT_FALLBACK = "sqlite:///./grabadora.db"
 
     def _bootstrap_factory(database_url: str) -> tuple[sessionmaker, Any]:
-        engine = create_engine(database_url, pool_pre_ping=True, future=True)
+        connect_args: dict[str, Any] = {}
+        if database_url.startswith("sqlite"):
+            connect_args = {"check_same_thread": False}
+        engine = create_engine(
+            database_url,
+            pool_pre_ping=True,
+            future=True,
+            connect_args=connect_args,
+        )
         factory = sessionmaker(
             bind=engine,
             autoflush=False,
@@ -125,6 +133,35 @@ else:
         except (ModuleNotFoundError, OperationalError) as exc:
             _initialize_fallback(exc)
 
+    def get_engine() -> Any:
+        """Return the synchronous engine bound to the session factory."""
+
+        _ensure_session_factory()
+        if _sync_engine is None:
+            raise RuntimeError(
+                "No database engine could be initialized. Configure GRABADORA_DATABASE_URL or install drivers.",
+            ) from _session_error
+        return _sync_engine
+
+    def get_session_factory() -> _SessionmakerType:
+        """Expose the lazily-initialised sessionmaker for integrations and migrations."""
+
+        _ensure_session_factory()
+        if _session_factory is None:
+            raise RuntimeError(
+                "No session factory is available. Configure GRABADORA_DATABASE_URL or install drivers.",
+            ) from _session_error
+        return _session_factory
+
+    class _SessionFactoryProxy:
+        def __call__(self, *args: Any, **kwargs: Any) -> _SessionType:
+            factory = get_session_factory()
+            return factory(*args, **kwargs)
+
+        def __getattr__(self, item: str) -> Any:
+            factory = get_session_factory()
+            return getattr(factory, item)
+
     @contextmanager
     def session_scope() -> _SessionType:
         """Provide a transactional scope around a series of operations."""
@@ -148,3 +185,16 @@ else:
     def get_session() -> Iterator[_SessionType]:  # pragma: no cover - thin wrapper
         with session_scope() as session:
             yield session
+
+    SessionLocal: _SessionmakerType = cast(_SessionmakerType, _SessionFactoryProxy())
+
+    __all__ = [
+        "Base",
+        "SessionLocal",
+        "get_engine",
+        "get_session",
+        "get_session_factory",
+        "session_scope",
+        "sync_engine",
+    ]
+

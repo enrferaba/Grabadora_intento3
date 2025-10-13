@@ -96,6 +96,7 @@ def main() -> None:
 
     resolved_mode = _resolve_mode(requested_mode)
     _apply_environment_for_mode(resolved_mode)
+    _ensure_local_database(resolved_mode)
     print(f"\n🚀 Ejecutando plataforma en modo: {resolved_mode}")
     if resolved_mode == "local":
         print("   • Cola en memoria y base de datos SQLite local")
@@ -139,6 +140,30 @@ def _apply_environment_for_mode(mode: str) -> None:
     _refresh_settings_cache()
     if mode == "stack":
         _validate_stack_runtime()
+
+
+def _ensure_local_database(mode: str) -> None:
+    if mode != "local":
+        return
+    try:
+        from app.database import Base, get_engine  # type: ignore
+    except Exception as exc:  # pragma: no cover - defensive
+        print(f"⚠️  No se pudo importar app.database para inicializar SQLite: {exc}")
+        return
+    try:
+        engine = get_engine()
+    except Exception as exc:  # pragma: no cover - defensive
+        print(f"⚠️  No se pudo inicializar el engine de base de datos: {exc}")
+        return
+    engine_url = getattr(engine, "url", None)
+    if hasattr(engine_url, "render_as_string"):
+        url_str = engine_url.render_as_string(hide_password=False)
+    else:
+        url_str = str(engine_url)
+    if not url_str.startswith("sqlite"):
+        return
+    Base.metadata.create_all(bind=engine)
+    print(f"   • Base de datos SQLite inicializada en {url_str}")
 
 
 def _refresh_settings_cache() -> None:

@@ -18,6 +18,7 @@ from sqlalchemy.sql import func
 
 from models.user import Base
 
+
 class TranscriptionStatus(str, enum.Enum):  # type: ignore[misc]
     PENDING = "pending"
     PROCESSING = "processing"

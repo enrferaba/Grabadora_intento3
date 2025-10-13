@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 import json
 import logging
+import os
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 
 try:  # pragma: no cover - optional dependency
     from faster_whisper import WhisperModel as _WhisperModel
@@ -12,6 +15,8 @@ if TYPE_CHECKING:  # pragma: no cover
     from faster_whisper import WhisperModel
 else:
     WhisperModel = Any
+
+from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -25,36 +30,80 @@ class TranscriptionService:
 
     def __init__(
         self,
-        model_size: str = "medium",
-        quantization: Quantization = "float16",
-        device: str = "auto",
+        model_size: str | None = None,
+        quantization: Quantization | None = None,
+        device: str | None = None,
         model_factory: Optional[Callable[..., WhisperModel]] = None,
+        *,
+        cache_dir: str | Path | None = None,
+        download_options: Optional[Dict[str, Any]] = None,
     ) -> None:
-        self.model_size = model_size
-        self.quantization = quantization
-        self.device = device
+        settings = get_settings()
+
+        resolved_model_size = (model_size or settings.whisper_model_size or "medium").strip()
+        if not resolved_model_size:
+            resolved_model_size = "medium"
+
+        resolved_device = (device or settings.whisper_device or "auto").strip().lower() or "auto"
+
+        resolved_quantization = quantization or settings.transcription_quantization or "float16"
+
+        compute_type_override = (settings.whisper_compute_type or "").strip() or None
+
+        cache_root = cache_dir or settings.models_cache_dir or "models"
+        cache_path = Path(cache_root).expanduser()
+        try:
+            cache_path.mkdir(parents=True, exist_ok=True)
+        except OSError:  # pragma: no cover - filesystem permission edge case
+            logger.exception("Unable to create model cache directory", extra={"path": str(cache_path)})
+        else:
+            os.environ.setdefault("CTranslate2_CACHE_DIR", str(cache_path))
+
+        dl_options: Dict[str, Any] = {}
+        if download_options:
+            dl_options.update(download_options)
+        dl_options.setdefault("cache_dir", str(cache_path))
+        hf_token = getattr(settings, "huggingface_token", None)
+        if hf_token and not dl_options.get("token"):
+            dl_options["token"] = hf_token
+
+        self.model_size = resolved_model_size
+        self.quantization = resolved_quantization
+        self.device = resolved_device
         self._model_factory = model_factory
         self._model: Optional[WhisperModel] = None
+        self._compute_type_override = compute_type_override
+        self._download_options = dl_options
         self._simulate = _WhisperModel is None and model_factory is None
         # validate quantization eagerly to fail-fast in misconfigured environments
-        self._map_quantization(self.quantization)
+        if self._compute_type_override is None:
+            self._map_quantization(self.quantization)
 
     @property
     def model(self) -> WhisperModel:
         if self._model is None:
-            compute_type = self._map_quantization(self.quantization)
+            compute_type = self._compute_type_override or self._map_quantization(self.quantization)
             factory = self._model_factory
             if factory is None:
                 if _WhisperModel is None:  # pragma: no cover - dependency not installed
                     raise RuntimeError("faster-whisper is not installed")
                 factory = _WhisperModel
+            factory_kwargs: Dict[str, Any] = {
+                "device": self.device,
+                "compute_type": compute_type,
+            }
+            if self._download_options:
+                factory_kwargs["download_options"] = dict(self._download_options)
             logger.info(
                 "Loading faster-whisper model",
-                extra={"model": self.model_size, "compute_type": compute_type},
+                extra={
+                    "model": self.model_size,
+                    "compute_type": compute_type,
+                    "device": self.device,
+                    "cache_dir": self._download_options.get("cache_dir"),
+                },
             )
-            self._model = factory(
-                self.model_size, device=self.device, compute_type=compute_type
-            )
+            self._model = factory(self.model_size, **factory_kwargs)
         return self._model
 
     @staticmethod
