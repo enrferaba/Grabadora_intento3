@@ -87,6 +87,26 @@ export function SseViewer({ tokens, status, error, onRetry, fontSize, onFontSize
           ✕ Salir
         </button>
       )}
+      {fullscreen && (
+        <span
+          role="note"
+          style={{
+            position: "fixed",
+            top: "1.25rem",
+            left: "1.5rem",
+            padding: "0.4rem 0.8rem",
+            borderRadius: "999px",
+            background: "rgba(15,23,42,0.7)",
+            border: "1px solid rgba(148,163,184,0.3)",
+            color: "#e2e8f0",
+            fontSize: "0.85rem",
+            letterSpacing: "0.01em",
+            boxShadow: "0 12px 25px -12px rgba(15,23,42,0.75)",
+          }}
+        >
+          Pulsa Esc o F11 para salir
+        </span>
+      )}
       <div
         className="card"
         style={{
