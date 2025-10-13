@@ -5,8 +5,8 @@ import os
 import re
 import tempfile
 import time
-import wave
 import warnings
+import wave
 from array import array
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -39,7 +39,6 @@ except Exception:  # pragma: no cover - runtime environments without GPU support
 from pydub import AudioSegment
 
 from .config import settings
-
 
 os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 os.environ.setdefault("HF_HUB_DISABLE_XET_WARNING", "1")
@@ -633,7 +632,8 @@ class WhisperXTranscriber(BaseTranscriber):
         if is_cuda_runtime_available():
             return "cuda"
         logger.warning(
-            "CUDA solicitado pero no disponible; se usará CPU. Configure WHISPER_FORCE_CUDA=true para forzar GPU si su entorno lo soporta.",
+            "CUDA solicitado pero no disponible; se usará CPU. "
+            "Configure WHISPER_FORCE_CUDA=true para forzar GPU si su entorno lo soporta.",
             extra={
                 "torch_cuda": _torch_cuda_available(),
                 "ctranslate2_cuda": _ctranslate_cuda_available(),
@@ -1096,7 +1096,10 @@ class WhisperXTranscriber(BaseTranscriber):
         if self._model is not None and progress_callback:
             progress_callback(
                 100,
-                f"WhisperX listo en {self._normalize_device(self.device_preference or settings.whisper_device)}.",
+                (
+                    "WhisperX listo en "
+                    f"{self._normalize_device(self.device_preference or settings.whisper_device)}."
+                ),
             )
 
     def _estimate_duration(self, audio_path: Path) -> Optional[float]:
@@ -1125,7 +1128,10 @@ class WhisperXTranscriber(BaseTranscriber):
                 if progress_callback:
                     progress_callback(
                         100,
-                        f"WhisperX listo en {self._normalize_device(self.device_preference or settings.whisper_device)}.",
+                        (
+                            "WhisperX listo en "
+                            f"{self._normalize_device(self.device_preference or settings.whisper_device)}."
+                        ),
                     )
                 return
             self._ensure_model(progress_callback=progress_callback)

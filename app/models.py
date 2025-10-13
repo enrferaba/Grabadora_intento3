@@ -13,12 +13,10 @@ from sqlalchemy import (
     String,
     Text,
 )
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
-from sqlalchemy.orm import relationship
-
-from .database import Base
-
+from models.user import Base
 
 class TranscriptionStatus(str, enum.Enum):  # type: ignore[misc]
     PENDING = "pending"

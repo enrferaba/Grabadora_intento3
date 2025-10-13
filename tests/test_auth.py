@@ -16,7 +16,5 @@ def test_create_access_token_contains_subject():
     token = auth.create_access_token({"sub": "123"}, expires_delta=timedelta(minutes=5))
     # Ensure token decodes back
     settings = get_settings()
-    payload = decode_jwt(
-        token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm]
-    )
+    payload = decode_jwt(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
     assert payload["sub"] == "123"

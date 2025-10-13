@@ -14,6 +14,11 @@ else:  # Fallback stubs so static analyzers keep the type information available
     _SessionType = Any
     _SessionmakerType = Any
 
+try:  # pragma: no cover - optional dependency re-export
+    from models.user import Base  # type: ignore
+except ImportError:  # pragma: no cover - minimal fallback for typing
+    Base = Any  # type: ignore
+
 try:  # pragma: no cover - optional dependency
     from sqlalchemy import create_engine
     from sqlalchemy.exc import OperationalError
@@ -35,7 +40,6 @@ else:
 
     logger = logging.getLogger(__name__)
 
-    from models.user import Base  # type: ignore
 
     _session_factory: _SessionmakerType | None = None
     _session_error: Exception | None = None

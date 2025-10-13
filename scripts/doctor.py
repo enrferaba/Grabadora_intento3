@@ -67,7 +67,8 @@ def print_report(statuses: Iterable[ModuleStatus]) -> int:
         print("  python -m uvicorn app.main:app --reload")
         print()
         print(
-            "Inicio de sesión con Google opcional: exporta GOOGLE_CLIENT_ID y GOOGLE_REDIRECT_URI si quieres habilitarlo."
+            "Inicio de sesión con Google opcional: exporta GOOGLE_CLIENT_ID y "
+            "GOOGLE_REDIRECT_URI si quieres habilitarlo."
         )
         return 0
 

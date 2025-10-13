@@ -31,7 +31,8 @@ def _require_supported_python() -> None:
     interpreter = Path(sys.executable)
     if "WindowsApps" in interpreter.parts:
         raise SystemExit(
-            "El intérprete activo proviene de Microsoft Store. Desactiva los alias de Python y usa el Python del entorno virtual."
+            "El intérprete activo proviene de Microsoft Store. "
+            "Desactiva los alias de Python y usa el Python del entorno virtual."
         )
 
 
@@ -181,7 +182,8 @@ def _validate_stack_runtime() -> None:
 
     if not workers:
         raise SystemExit(
-            "No se detectaron workers de RQ activos. Arranca 'python -m taskqueue.worker' o el servicio correspondiente antes de usar --mode stack."
+            "No se detectaron workers de RQ activos. Arranca 'python -m taskqueue.worker' "
+            "o el servicio correspondiente antes de usar --mode stack."
         )
 
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 
 from redis import Redis
-from rq import Connection, Queue, Worker
+from rq import Connection, Worker
 
 from app.config import get_settings
 

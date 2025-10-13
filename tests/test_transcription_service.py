@@ -1,9 +1,6 @@
 from pathlib import Path
 from types import SimpleNamespace
 
-from pathlib import Path
-from types import SimpleNamespace
-
 import pytest
 
 from services.transcription import TranscriptionService

@@ -8,14 +8,9 @@ from sqlalchemy.orm import Session
 
 from ..database import get_session
 from ..models import PaymentStatus, PricingTier, Purchase, Transcription
-from ..schemas import (
-    CheckoutRequest,
-    PricingTierSchema,
-    PurchaseDetail,
-    PurchaseResponse,
-)
-from ..utils.payments import generate_checkout_link
+from ..schemas import CheckoutRequest, PricingTierSchema, PurchaseDetail, PurchaseResponse
 from ..utils.notes import generate_premium_notes
+from ..utils.payments import generate_checkout_link
 
 logger = logging.getLogger(__name__)
 
