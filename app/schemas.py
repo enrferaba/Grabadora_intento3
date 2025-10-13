@@ -149,6 +149,11 @@ class TranscriptResponse(BaseModel):
     quality_profile: Optional[str] = None
 
 
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str
+
+
 @_enable_from_attributes
 class DebugEvent(BaseModel):
     timestamp: str

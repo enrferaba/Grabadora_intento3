@@ -155,6 +155,7 @@ from app.schemas import (
     UserCreate,
     UserRead,
     ProfileRead,
+    TokenResponse,
 )
 try:  # pragma: no cover - optional dependency
     from models.user import Profile, Transcript, User
@@ -280,6 +281,7 @@ API_ROUTE_PREFIXES = (
     "transcribe",
     "jobs",
     "transcripts",
+    "users",
     "healthz",
     "metrics",
     "profiles",
@@ -351,33 +353,48 @@ if FastAPI is not None:
         description=settings.api_description,
         lifespan=_lifespan,
     )
-    allow_origins: List[str] = []
-    frontend_origin = getattr(settings, "frontend_origin", None)
-    if frontend_origin:
-        allow_origins = ["*"] if frontend_origin == "*" else [frontend_origin]
-    elif getattr(settings, "queue_backend", "auto") == "memory":
-        allow_origins = ["*"]
-    if allow_origins:
-        app.add_middleware(
-            CORSMiddleware,
-            allow_origins=allow_origins,
-            allow_credentials=True,
-            allow_methods=["*"],
-            allow_headers=["*"],
-        )
+    cors_kwargs: Dict[str, Any] | None = None
+    origin_regex = getattr(settings, "frontend_origin_regex", None)
+    if origin_regex:
+        cors_kwargs = {
+            "allow_origin_regex": origin_regex,
+            "allow_credentials": True,
+            "allow_methods": ["*"],
+            "allow_headers": ["*"],
+        }
+    else:
+        frontend_origin = getattr(settings, "frontend_origin", None)
+        if frontend_origin:
+            origins = [item.strip() for item in frontend_origin.split(",") if item.strip()]
+            if origins:
+                if origins == ["*"]:
+                    cors_kwargs = {
+                        "allow_origins": ["*"],
+                        "allow_credentials": False,
+                        "allow_methods": ["*"],
+                        "allow_headers": ["*"],
+                    }
+                else:
+                    cors_kwargs = {
+                        "allow_origins": origins,
+                        "allow_credentials": True,
+                        "allow_methods": ["*"],
+                        "allow_headers": ["*"],
+                    }
+    if cors_kwargs:
+        app.add_middleware(CORSMiddleware, **cors_kwargs)
     metrics_enabled = False
     instrumentator_module = getattr(Instrumentator, "__module__", "")
     if "prometheus_fastapi_instrumentator" in instrumentator_module:
         try:
             Instrumentator(namespace=settings.prometheus_namespace).instrument(app).expose(app)
             metrics_enabled = True
+            logger.info("Prometheus instrumentation enabled", extra={"endpoint": "/metrics"})
         except Exception as exc:  # pragma: no cover - defensive guard
             logger.warning(
                 "Prometheus instrumentation could not be initialised",
                 extra={"error": repr(exc)},
             )
-    else:
-        logger.info("Prometheus instrumentation not available; skipping /metrics endpoint")
     setattr(app.state, "metrics_enabled", metrics_enabled)
 
 API_ERRORS = Counter("api_errors_total", "Total API errors", namespace=settings.prometheus_namespace)
@@ -587,58 +604,40 @@ async def _stream_job(
 
 if app is not None:
 
-    if StaticFiles is not None and FRONTEND_DIST.exists():
-
-        class SPAStaticFiles(StaticFiles):
-            async def get_response(self, path: str, scope):  # type: ignore[override]
-                normalized = path.strip("/")
-                if normalized:
-                    for prefix in API_ROUTE_PREFIXES:
-                        if normalized == prefix or normalized.startswith(f"{prefix}/"):
-                            return await super().get_response(path, scope)
-                try:
-                    response = await super().get_response(path, scope)
-                except HTTPException as exc:
-                    if exc.status_code != 404:
-                        raise
-                    return await super().get_response("index.html", scope)
-                if getattr(response, "status_code", None) == 404:
-                    return await super().get_response("index.html", scope)
-                return response
-
-        app.mount("/", SPAStaticFiles(directory=FRONTEND_DIST, html=True), name="spa")
-
-    else:
-
-        @app.get("/", response_class=HTMLResponse, include_in_schema=False)
-        async def root() -> HTMLResponseType:
-            return _spa_index()
-
-        @app.get("/{full_path:path}", include_in_schema=False)
-        async def spa_router(full_path: str) -> ResponseType:
-            candidate = FRONTEND_DIST / full_path
-            if full_path and candidate.exists() and candidate.is_file():
-                if isinstance(FileResponse, type):
-                    return FileResponse(candidate)
-                return HTMLResponse(candidate.read_text(encoding="utf-8"))
-            normalized = full_path.strip("/")
-            if normalized:
-                for prefix in API_ROUTE_PREFIXES:
-                    if normalized == prefix or normalized.startswith(f"{prefix}/"):
-                        raise HTTPException(status_code=404, detail="Not Found")
-            return _spa_index()
-
     @app.exception_handler(Exception)
     async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponseType:
         API_ERRORS.inc()
         logger.exception("Unhandled exception", exc_info=exc)
         return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
 
-    @app.post("/auth/token")
-    async def login(form_data: auth.OAuth2PasswordRequestForm = Depends()) -> dict:  # type: ignore[assignment]
-        return auth.login(form_data)
+    @app.post(
+        "/auth/token",
+        response_model=TokenResponse,
+        summary="Obtener token de acceso",
+        description=(
+            "Autentica al usuario con el flujo password de OAuth2 y devuelve un token JWT para "
+            "autorizar llamadas posteriores."
+        ),
+        tags=["Autenticación"],
+        responses={
+            400: {"description": "Faltan credenciales"},
+            401: {"description": "Credenciales incorrectas"},
+        },
+    )
+    async def login(form_data: auth.OAuth2PasswordRequestForm = Depends()) -> TokenResponse:  # type: ignore[assignment]
+        return TokenResponse.model_validate(auth.login(form_data))
 
-    @app.post("/auth/signup", response_model=UserRead, status_code=201)
+    @app.post(
+        "/auth/signup",
+        response_model=UserRead,
+        status_code=201,
+        summary="Registrar una cuenta",
+        description="Crea un nuevo usuario y provisiona automáticamente el perfil 'Default'.",
+        tags=["Autenticación"],
+        responses={
+            400: {"description": "El usuario ya existe"},
+        },
+    )
     async def signup(payload: UserCreate) -> UserRead:
         with session_scope() as session:
             existing = session.query(User).filter(User.email == payload.email).one_or_none()
@@ -652,11 +651,35 @@ if app is not None:
             session.refresh(user)
             return UserRead.model_validate(user)
 
-    @app.post("/users", response_model=UserRead, status_code=201)
+    @app.post(
+        "/users",
+        response_model=UserRead,
+        status_code=201,
+        summary="Crear usuario (alias)",
+        description="Alias de `/auth/signup` mantenido por compatibilidad con integraciones antiguas.",
+        tags=["Autenticación"],
+        responses={
+            400: {"description": "El usuario ya existe"},
+        },
+    )
     async def create_user(payload: UserCreate) -> UserRead:
         return await signup(payload)
 
-    @app.post("/transcribe", response_model=TranscriptResponse)
+    @app.post(
+        "/transcribe",
+        response_model=TranscriptResponse,
+        summary="Encolar una transcripción de audio",
+        description=(
+            "Acepta un archivo de audio en formato multipart/form-data, lo almacena y encola una "
+            "tarea de transcripción en segundo plano."
+        ),
+        tags=["Transcripciones"],
+        responses={
+            400: {"description": "Perfil de calidad inválido"},
+            401: {"description": "Autenticación requerida"},
+            413: {"description": "El archivo supera el tamaño permitido"},
+        },
+    )
     async def create_transcription_job(
         file: UploadFile = File(...),
         language: Optional[str] = Form(None),
@@ -757,12 +780,26 @@ if app is not None:
 
         return TranscriptResponse(job_id=job.id, status="queued", quality_profile=profile)
 
-    @app.get("/transcribe/{job_id}")
+    @app.get(
+        "/transcribe/{job_id}",
+        summary="Escuchar el stream SSE de una transcripción",
+        description=(
+            "Devuelve un stream de eventos Server-Sent Events (`text/event-stream`) con los "
+            "deltas, snapshots, latidos y evento final de la transcripción."
+        ),
+        tags=["Transcripciones"],
+        responses={
+            200: {"description": "Stream abierto", "content": {"text/event-stream": {}}},
+            401: {"description": "Autenticación requerida"},
+            404: {"description": "Trabajo no encontrado"},
+        },
+    )
     async def stream_transcription(
         job_id: str, user: AuthenticatedUser = Depends(get_current_user)
     ) -> EventSourceResponse:
 
-        async def event_generator() -> AsyncGenerator[Dict[str, str], None]:
+        async def event_generator() -> AsyncGenerator[Dict[str, Any], None]:
+            yield {"retry": 5000}
             try:
                 async for event in _stream_job(job_id, expected_user_id=user.id):
                     yield event
@@ -775,14 +812,23 @@ if app is not None:
         return EventSourceResponse(
             event_generator(),
             ping=10.0,
-            retry=5000,
             headers={
                 "Cache-Control": "no-cache",
                 "X-Accel-Buffering": "no",
             },
         )
 
-    @app.get("/jobs/{job_id}")
+    @app.get(
+        "/jobs/{job_id}",
+        summary="Consultar el estado de una transcripción en cola",
+        description="Devuelve el estado más reciente del job y metadatos auxiliares como progreso y URL firmada.",
+        tags=["Transcripciones"],
+        responses={
+            200: {"description": "Estado del trabajo recuperado"},
+            401: {"description": "Autenticación requerida"},
+            404: {"description": "Trabajo no encontrado"},
+        },
+    )
     async def get_job_status(job_id: str, user: AuthenticatedUser = Depends(get_current_user)) -> JSONResponse:
         queue, _ = _obtain_queue()
         job = queue.fetch_job(job_id)
@@ -815,7 +861,17 @@ if app is not None:
             )
         return JSONResponse(payload)
 
-    @app.get("/transcripts", response_model=List[TranscriptSummary])
+    @app.get(
+        "/transcripts",
+        response_model=List[TranscriptSummary],
+        summary="Listar transcripciones",
+        description="Devuelve las transcripciones del usuario autenticado con filtros opcionales por estado y búsqueda.",
+        tags=["Transcripciones"],
+        responses={
+            200: {"description": "Listado recuperado"},
+            401: {"description": "Autenticación requerida"},
+        },
+    )
     async def list_transcripts(
         search: Optional[str] = Query(None, description="Texto libre para filtrar títulos o etiquetas"),
         status: Optional[str] = Query(None, description="Filtra por estado"),
@@ -840,7 +896,18 @@ if app is not None:
             results.append(_transcript_to_summary(transcript))
         return results
 
-    @app.get("/transcripts/{transcript_id}", response_model=TranscriptDetail)
+    @app.get(
+        "/transcripts/{transcript_id}",
+        response_model=TranscriptDetail,
+        summary="Obtener detalle de una transcripción",
+        description="Incluye segmentos, metadatos y URL firmada cuando está disponible.",
+        tags=["Transcripciones"],
+        responses={
+            200: {"description": "Transcripción encontrada"},
+            401: {"description": "Autenticación requerida"},
+            404: {"description": "Transcripción no encontrada"},
+        },
+    )
     async def get_transcript(
         transcript_id: int, user: AuthenticatedUser = Depends(get_current_user)
     ) -> TranscriptDetail:
@@ -850,7 +917,19 @@ if app is not None:
                 raise HTTPException(status_code=404, detail="Transcript not found")
         return _transcript_to_detail(transcript)
 
-    @app.patch("/transcripts/{transcript_id}", response_model=TranscriptDetail)
+    @app.patch(
+        "/transcripts/{transcript_id}",
+        response_model=TranscriptDetail,
+        summary="Actualizar metadatos de una transcripción",
+        description="Permite ajustar título, etiquetas, notas y perfil de calidad asociado.",
+        tags=["Transcripciones"],
+        responses={
+            200: {"description": "Transcripción actualizada"},
+            400: {"description": "Solicitud inválida"},
+            401: {"description": "Autenticación requerida"},
+            404: {"description": "Transcripción no encontrada"},
+        },
+    )
     async def update_transcript_metadata(
         transcript_id: int,
         payload: TranscriptUpdateRequest,
@@ -896,7 +975,19 @@ if app is not None:
 
         return _transcript_to_detail(transcript)
 
-    @app.delete("/transcripts/{transcript_id}", status_code=204, response_class=Response)
+    @app.delete(
+        "/transcripts/{transcript_id}",
+        status_code=204,
+        response_class=Response,
+        summary="Eliminar una transcripción",
+        description="Elimina la transcripción y los blobs asociados del almacenamiento.",
+        tags=["Transcripciones"],
+        responses={
+            204: {"description": "Transcripción eliminada"},
+            401: {"description": "Autenticación requerida"},
+            404: {"description": "Transcripción no encontrada"},
+        },
+    )
     async def delete_transcript(
         transcript_id: int, user: AuthenticatedUser = Depends(get_current_user)
     ) -> Response:
@@ -944,7 +1035,23 @@ if app is not None:
             lines.extend([str(idx), f"{start_ts.replace('.', ',')} --> {end_ts.replace('.', ',')}", text, ""])
         return "\n".join(lines).strip()
 
-    @app.get("/transcripts/{transcript_id}/download")
+    @app.get(
+        "/transcripts/{transcript_id}/download",
+        summary="Descargar transcripción en archivo",
+        description="Genera la transcripción en formato TXT, Markdown o SRT y entrega un archivo descargable.",
+        tags=["Transcripciones"],
+        responses={
+            200: {
+                "description": "Archivo generado",
+                "content": {
+                    "text/plain": {},
+                    "application/x-subrip": {},
+                },
+            },
+            401: {"description": "Autenticación requerida"},
+            404: {"description": "Transcripción no encontrada"},
+        },
+    )
     async def download_transcript(
         transcript_id: int,
         format: str = Query("txt", enum=["txt", "md", "srt"]),
@@ -972,7 +1079,18 @@ if app is not None:
         response.headers["Content-Disposition"] = f"attachment; filename={filename}"
         return response
 
-    @app.post("/transcripts/{transcript_id}/export")
+    @app.post(
+        "/transcripts/{transcript_id}/export",
+        summary="Exportar una transcripción",
+        description="Encola la exportación de la transcripción hacia Notion, Trello u otro destino webhook.",
+        tags=["Integraciones"],
+        responses={
+            200: {"description": "Exportación encolada"},
+            400: {"description": "Destino no soportado"},
+            401: {"description": "Autenticación requerida"},
+            404: {"description": "Transcripción no encontrada"},
+        },
+    )
     async def export_transcript(
         transcript_id: int,
         payload: TranscriptExportRequest = Body(...),
@@ -1001,12 +1119,28 @@ if app is not None:
             }
         )
 
-    @app.get("/healthz")
+    @app.get(
+        "/healthz",
+        summary="Healthcheck básico",
+        description="Devuelve un estado mínimo con marca temporal para comprobar que la API responde.",
+        tags=["Monitorización"],
+        responses={200: {"description": "Servicio operativo"}},
+    )
     async def healthcheck() -> JSONResponseType:
         _sample_gpu_usage()
         return JSONResponse({"status": "ok", "time": datetime.now(UTC).isoformat()})
 
-    @app.get("/profiles", response_model=ProfilesResponse)
+    @app.get(
+        "/profiles",
+        response_model=ProfilesResponse,
+        summary="Listar perfiles de calidad",
+        description="Recupera perfiles predefinidos y personalizados disponibles para el usuario.",
+        tags=["Configuración"],
+        responses={
+            200: {"description": "Perfiles recuperados"},
+            401: {"description": "Autenticación requerida"},
+        },
+    )
     async def get_profiles(
         user: AuthenticatedUser = Depends(get_current_user),
     ) -> ProfilesResponse:
@@ -1033,7 +1167,14 @@ if app is not None:
             account_profiles=account_profiles,
         )
 
-    @app.get("/config", response_model=AppConfigResponse)
+    @app.get(
+        "/config",
+        response_model=AppConfigResponse,
+        summary="Configurar la SPA",
+        description="Expone límites de subida, modo de cola, flags SSE y estado del almacenamiento para la SPA.",
+        tags=["Configuración"],
+        responses={200: {"description": "Configuración actual"}},
+    )
     async def get_config() -> AppConfigResponse:
         storage = S3StorageClient()
         storage_mode = "local" if getattr(storage, "_local_mode", False) else "remote"
@@ -1059,6 +1200,25 @@ if app is not None:
             storage_ready=storage_ready,
             features=features,
         )
+
+    @app.get("/", response_class=HTMLResponse, include_in_schema=False)
+    async def root() -> HTMLResponseType:
+        return _spa_index()
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def spa_router(full_path: str) -> ResponseType:
+        candidate = FRONTEND_DIST / full_path
+        if full_path and candidate.exists() and candidate.is_file():
+            if isinstance(FileResponse, type):
+                return FileResponse(candidate)
+            return HTMLResponse(candidate.read_text(encoding="utf-8"))
+        normalized = full_path.strip("/")
+        if normalized:
+            for prefix in API_ROUTE_PREFIXES:
+                if normalized == prefix or normalized.startswith(f"{prefix}/"):
+                    raise HTTPException(status_code=404, detail="Not Found")
+        return _spa_index()
+
 
 def create_app() -> FastAPIApp:
     if app is None:

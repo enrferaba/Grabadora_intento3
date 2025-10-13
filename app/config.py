@@ -74,6 +74,7 @@ class Settings:
     audio_cache_dir: str = "audio-cache"
     models_cache_dir: str = "models"
     frontend_origin: str | None = None
+    frontend_origin_regex: str | None = None
 
     max_upload_size_mb: int = 500
     live_window_seconds: float = 5.0
