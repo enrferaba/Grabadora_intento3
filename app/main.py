@@ -351,20 +351,17 @@ if FastAPI is not None:
         description=settings.api_description,
         lifespan=_lifespan,
     )
-    allow_origins: List[str] = []
+    allow_origins: List[str] = ["*"]
     frontend_origin = getattr(settings, "frontend_origin", None)
-    if frontend_origin:
-        allow_origins = ["*"] if frontend_origin == "*" else [frontend_origin]
-    elif getattr(settings, "queue_backend", "auto") == "memory":
-        allow_origins = ["*"]
-    if allow_origins:
-        app.add_middleware(
-            CORSMiddleware,
-            allow_origins=allow_origins,
-            allow_credentials=True,
-            allow_methods=["*"],
-            allow_headers=["*"],
-        )
+    if frontend_origin and frontend_origin != "*":
+        allow_origins = [frontend_origin]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=allow_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     metrics_enabled = False
     instrumentator_module = getattr(Instrumentator, "__module__", "")
     if "prometheus_fastapi_instrumentator" in instrumentator_module:
