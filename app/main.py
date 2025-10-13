@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import logging
 import uuid
@@ -450,9 +451,25 @@ if FastAPI is not None:
     instrumentator_module = getattr(Instrumentator, "__module__", "")
     if "prometheus_fastapi_instrumentator" in instrumentator_module:
         try:
-            Instrumentator(namespace=settings.prometheus_namespace).instrument(
-                app
-            ).expose(app)
+            namespace_supported = False
+            namespace_value = getattr(settings, "prometheus_namespace", None)
+            try:
+                signature = inspect.signature(Instrumentator.__init__)  # type: ignore[arg-type]
+            except (TypeError, ValueError):  # pragma: no cover - signature introspection failed
+                signature = None
+            instrumentator_kwargs: Dict[str, Any] = {}
+            if signature and "namespace" in signature.parameters:
+                namespace_supported = True
+            if namespace_supported and namespace_value:
+                instrumentator_kwargs["namespace"] = namespace_value
+            elif namespace_value and not namespace_supported:
+                logger.info(
+                    "Prometheus instrumentator version does not accept a namespace argument; "
+                    "using default namespace",
+                    extra={"namespace": namespace_value},
+                )
+            instrumentator = Instrumentator(**instrumentator_kwargs)
+            instrumentator.instrument(app).expose(app)
             metrics_enabled = True
             logger.info(
                 "Prometheus instrumentation enabled", extra={"endpoint": "/metrics"}

@@ -6,6 +6,7 @@ Elige el bloque que corresponda a tu sistema operativo. Todos los comandos asume
 
 1. **Preparar Python y dependencias**
    ```powershell
+   # Usa "python" si la orden "py" no está disponible en tu equipo
    py -3.11 -m venv .venv
    .\.venv\Scripts\Activate.ps1
    pip install -r requirements/base.txt
@@ -36,7 +37,7 @@ Elige el bloque que corresponda a tu sistema operativo. Todos los comandos asume
    ```
 
 5. **Cola de trabajos (opcional)**
-   Solo si usas Redis: 
+   Solo si usas Redis (por ejemplo, tras ejecutar `docker compose up redis`): 
    ```powershell
    $env:GRABADORA_REDIS_URL="redis://localhost:6379/0"
    rq worker transcription --url $env:GRABADORA_REDIS_URL
@@ -82,6 +83,7 @@ Elige el bloque que corresponda a tu sistema operativo. Todos los comandos asume
 
 5. **Worker opcional (Redis)**
    ```bash
+   # Asegúrate de que Redis está en marcha (por ejemplo con `docker compose up redis`)
    export GRABADORA_REDIS_URL=redis://localhost:6379/0
    rq worker transcription --url "$GRABADORA_REDIS_URL"
    ```
@@ -95,15 +97,15 @@ Elige el bloque que corresponda a tu sistema operativo. Todos los comandos asume
 ## Flujo de prueba
 
 1. Abre `http://localhost:8000/docs`.
-2. Crea un usuario (`POST /auth/signup`).
+2. Ejecuta `python scripts/seed_dev.py` para crear un usuario demo (`admin@local.com / admin123`) o usa `POST /auth/signup`.
 3. Obtén un token (`POST /auth/token`) y pulsa **Authorize** → `Bearer <token>`.
 4. Desde la SPA (o Swagger) sube un audio y verifica que llega la transcripción. Si S3/MinIO no está disponible, el backend guardará los archivos en `./data/`.
-5. Ejecuta `python scripts/seed_dev.py` para crear un usuario demo rápidamente si lo prefieres.
 
 ## Problemas habituales
 
 - **`rq worker` dice que falta `--url`**: en PowerShell usa `$env:VARIABLE`, no `$VARIABLE`.
 - **Error compilando PyAV en Windows**: usa Docker o WSL; la imagen oficial ya incluye FFmpeg y las cabeceras necesarias.
 - **`docker compose up` pide `.env`**: el repositorio incluye un `.env` mínimo que apunta a `.env.example`. Crea `.env.local` para credenciales reales y exporta `GRABADORA_ENV_FILE=.env.local` si quieres que Compose lo cargue.
+- **`py` no se reconoce**: instala Python desde la Microsoft Store o usa `python -m venv .venv`.
 
 Mantén este archivo a mano y actualízalo cuando cambie el proceso de arranque.

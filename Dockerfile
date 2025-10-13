@@ -25,7 +25,7 @@ RUN apt-get update \
 
 COPY pyproject.toml /app/
 
-RUN pip install --no-cache-dir "poetry==${POETRY_VERSION}" \
+RUN pip install --no-cache-dir "Cython<3" "poetry==${POETRY_VERSION}" \
     && poetry config virtualenvs.create false \
     && poetry install --without dev --no-root
 
