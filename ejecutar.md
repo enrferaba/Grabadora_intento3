@@ -22,7 +22,9 @@ Este documento explica cómo verificar el entorno, arrancar la plataforma y reso
 ### 1.3 Instalar dependencias
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements.txt  # stack completa con modelos
+# Si solo quieres probar la API sin dependencias pesadas:
+# pip install -r requirements/base.txt
 # o con Poetry
 poetry install
 ```

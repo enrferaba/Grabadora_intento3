@@ -107,6 +107,8 @@
 ### 4.2 Ejecución local sin Docker
 1. Crear entorno virtual con Python 3.11+: `python3.11 -m venv .venv && source .venv/bin/activate`.
 2. Instalar dependencias backend: `pip install -r requirements.txt` (o `poetry install`).
+   * El archivo principal incluye la pila de ML (`faster-whisper`, `whisperx`, `torch`).
+   * Para un arranque ligero (sin modelos), puedes usar `pip install -r requirements/base.txt`.
 3. Validar entorno y puertos libres: `python doctor.py --mode local --install-missing --fix-frontend`.
 4. Ejecutar migraciones si usas PostgreSQL: `alembic upgrade head`. En modo local sin DB externa se usará SQLite automáticamente.
 5. Arrancar el backend: `uvicorn app.main:app --reload --host 0.0.0.0 --port 8000`.
