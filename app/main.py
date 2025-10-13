@@ -145,8 +145,10 @@ from app.config import get_settings
 from app.database import session_scope
 from app.schemas import (
     AppConfigResponse,
+    ProfileRead,
     ProfilesResponse,
     QualityProfileSchema,
+    TokenResponse,
     TranscriptDetail,
     TranscriptExportRequest,
     TranscriptResponse,
@@ -154,9 +156,8 @@ from app.schemas import (
     TranscriptUpdateRequest,
     UserCreate,
     UserRead,
-    ProfileRead,
-    TokenResponse,
 )
+
 try:  # pragma: no cover - optional dependency
     from models.user import Profile, Transcript, User
 except ImportError:  # pragma: no cover
@@ -191,9 +192,9 @@ except ImportError:  # pragma: no cover
             self.email = ""
             self.profiles: list = []
 
+from storage.s3 import S3StorageClient
 from taskqueue import tasks
 from taskqueue.fallback import InMemoryQueue, InMemoryRedis
-from storage.s3 import S3StorageClient
 
 _fallback_queue: InMemoryQueue | None = None
 
@@ -902,7 +903,10 @@ if app is not None:
         "/transcripts",
         response_model=List[TranscriptSummary],
         summary="Listar transcripciones",
-        description="Devuelve las transcripciones del usuario autenticado con filtros opcionales por estado y búsqueda.",
+        description=(
+            "Devuelve las transcripciones del usuario autenticado con filtros opcionales por "
+            "estado y búsqueda."
+        ),
         tags=["Transcripciones"],
         responses={
             200: {"description": "Listado recuperado"},
@@ -949,7 +953,11 @@ if app is not None:
         transcript_id: int, user: AuthenticatedUser = Depends(get_current_user)
     ) -> TranscriptDetail:
         with session_scope() as session:
-            transcript = session.query(Transcript).filter(Transcript.id == transcript_id, Transcript.user_id == user.id).one_or_none()
+            transcript = (
+                session.query(Transcript)
+                .filter(Transcript.id == transcript_id, Transcript.user_id == user.id)
+                .one_or_none()
+            )
             if transcript is None:
                 raise HTTPException(status_code=404, detail="Transcript not found")
         return _transcript_to_detail(transcript)
@@ -1095,7 +1103,11 @@ if app is not None:
         user: AuthenticatedUser = Depends(get_current_user),
     ) -> ResponseType:
         with session_scope() as session:
-            transcript = session.query(Transcript).filter(Transcript.id == transcript_id, Transcript.user_id == user.id).one_or_none()
+            transcript = (
+                session.query(Transcript)
+                .filter(Transcript.id == transcript_id, Transcript.user_id == user.id)
+                .one_or_none()
+            )
             if transcript is None or not transcript.transcript_key:
                 raise HTTPException(status_code=404, detail="Transcript not found")
         storage = S3StorageClient()
@@ -1106,7 +1118,10 @@ if app is not None:
         media_type = "text/plain"
         if format == "md":
             header = f"# {transcript.title or 'Transcripción'}\n\n"
-            details = f"- Idioma: {transcript.language or 'desconocido'}\n- Perfil: {transcript.quality_profile or 'n/a'}\n\n"
+            details = (
+                f"- Idioma: {transcript.language or 'desconocido'}\n"
+                f"- Perfil: {transcript.quality_profile or 'n/a'}\n\n"
+            )
             content = header + details + content
         elif format == "srt":
             detail = _transcript_to_detail(transcript, include_url=False)
@@ -1137,7 +1152,11 @@ if app is not None:
         if payload.destination not in allowed_destinations:
             raise HTTPException(status_code=400, detail="Unsupported destination")
         with session_scope() as session:
-            transcript = session.query(Transcript).filter(Transcript.id == transcript_id, Transcript.user_id == user.id).one_or_none()
+            transcript = (
+                session.query(Transcript)
+                .filter(Transcript.id == transcript_id, Transcript.user_id == user.id)
+                .one_or_none()
+            )
             if transcript is None:
                 raise HTTPException(status_code=404, detail="Transcript not found")
         logger.info(

@@ -1,7 +1,7 @@
 import json
 import logging
 from pathlib import Path
-from typing import Any, Callable, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
 try:  # pragma: no cover - optional dependency
     from faster_whisper import WhisperModel as _WhisperModel

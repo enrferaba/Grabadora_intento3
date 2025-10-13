@@ -8,7 +8,7 @@ import json
 import secrets
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Any, List, Optional
+from typing import List, Optional
 
 try:  # pragma: no cover - optional dependency
     from fastapi import Depends, HTTPException, status
