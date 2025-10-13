@@ -4,18 +4,18 @@ Este documento describe el recorrido de una transcripción desde que el usuario 
 
 ## 1. Frontend (React/Vite)
 
-1. La SPA se sirve desde `frontend/dist/` y monta un router que gestiona rutas internas (`/`, `/transcribir`, `/biblioteca`).
+1. La SPA se sirve desde `frontend/dist/` y monta un router que gestiona rutas internas (`/`, `/transcribir`, `/biblioteca`). En desarrollo `npm run dev` expone Vite en `http://localhost:5173` con proxy hacia `http://localhost:8000`.
 2. Al iniciar una transcripción, el componente de subida crea un `FormData` con:
    - `file`: blob de audio seleccionado o grabado.
    - `language`, `profile`, `title`, `tags`, `diarization`, `word_timestamps`.
 3. La petición va a `POST /transcribe` con cabecera `Authorization: Bearer <token>`.
-4. Tras recibir `{job_id}`, la SPA abre un `EventSource` a `GET /transcribe/{job_id}` con reconexión automática.
+4. Tras recibir `{job_id}`, la SPA abre un flujo HTTP (`fetch` + `ReadableStream`) a `GET /transcribe/{job_id}` y aplica reconexión exponencial.
 5. Los eventos SSE esperados:
    - `delta`: texto incremental con posiciones `t0/t1`.
    - `progress`: porcentaje aproximado.
    - `completed`: metadatos finales (`transcript_id`, `language`, `duration`).
    - `error`: detiene la UI y muestra mensaje.
-6. El usuario puede alternar modo pantalla completa; la UI debe incluir un botón “Salir de pantalla completa” y recordatorio de Esc/F11.
+6. El usuario puede alternar modo pantalla completa; la UI debe incluir un botón “Salir de pantalla completa” y recordatorio de Esc/F11. El visor hace autoscroll únicamente si el usuario está cerca del final para respetar revisiones manuales.
 7. La biblioteca consulta `GET /transcripts` y muestra chips de estado (`queued`, `started`, `completed`, `failed`). Al seleccionar un elemento, invoca `GET /transcripts/{id}`.
 8. Acciones adicionales: descarga `GET /transcripts/{id}/download?format=txt|srt` y exportación `POST /transcripts/{id}/export`.
 

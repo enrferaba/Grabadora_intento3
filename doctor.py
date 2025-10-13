@@ -10,14 +10,22 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import os
+import re
 import shutil
+import socket
 import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List
 
-MIN_PYTHON = (3, 11)
+MIN_PYTHON = (3, 10)
+MIN_NODE = (20, 0, 0)
+DEFAULT_PORTS = {
+    8000: "API FastAPI",
+    5173: "Frontend Vite",
+    9000: "MinIO",
+}
 
 
 @dataclass
@@ -36,6 +44,8 @@ class CheckResult:
             line += f"\n   Sugerencia: {self.remedy}"
             if self.details:
                 line += f"\n   Detalle: {self.details}"
+        elif self.details:
+            line += f"\n   Detalle: {self.details}"
         return line
 
 
@@ -63,6 +73,14 @@ CLI_REQUIREMENTS = {
 }
 
 FFMPEG_REMEDY = "Instala FFmpeg y asegúrate de que 'ffmpeg' esté en el PATH."
+
+
+def _parse_version(raw: str) -> tuple[int, int, int]:
+    match = re.search(r"(\d+)\.(\d+)\.(\d+)", raw)
+    if not match:
+        return (0, 0, 0)
+    major, minor, patch = match.groups()
+    return int(major), int(minor), int(patch)
 
 
 def check_python_packages() -> List[CheckResult]:
@@ -100,6 +118,34 @@ def check_python_runtime() -> CheckResult:
     )
 
 
+def check_node_runtime() -> CheckResult:
+    node = shutil.which("node")
+    if node is None:
+        return CheckResult(
+            name="Node.js >= 20 LTS",
+            ok=False,
+            remedy="Instala Node.js 20 LTS desde https://nodejs.org/",
+            details="No se encontró el ejecutable 'node' en PATH.",
+        )
+    try:
+        raw = subprocess.check_output([node, "--version"], text=True).strip()
+    except Exception as exc:  # pragma: no cover - depende del entorno
+        return CheckResult(
+            name="Node.js >= 20 LTS",
+            ok=False,
+            remedy="Reinstala Node.js o añade el binario correcto al PATH.",
+            details=str(exc),
+        )
+    version = _parse_version(raw)
+    ok = version >= MIN_NODE
+    return CheckResult(
+        name="Node.js >= 20 LTS",
+        ok=ok,
+        remedy="Actualiza Node.js a la versión 20 LTS o superior.",
+        details=f"Versión detectada: {raw}",
+    )
+
+
 def check_cli_tools() -> List[CheckResult]:
     results: List[CheckResult] = []
     for command, remedy in CLI_REQUIREMENTS.items():
@@ -133,6 +179,37 @@ def check_ffmpeg_available() -> CheckResult:
     )
 
 
+def check_gpu_status() -> CheckResult:
+    command = shutil.which("nvidia-smi")
+    if command is None:
+        return CheckResult(
+            name="nvidia-smi disponible",
+            ok=True,
+            remedy="Instala los drivers de NVIDIA si deseas usar GPU (opcional).",
+            details="No se detectó 'nvidia-smi'; se asumirá ejecución por CPU.",
+        )
+    try:
+        output = subprocess.check_output(
+            [command, "--query-gpu=name,memory.total", "--format=csv,noheader"],
+            text=True,
+        ).strip()
+        details = output or "Sin GPUs listadas"
+        ok = bool(output)
+    except Exception as exc:  # pragma: no cover - depende del entorno
+        return CheckResult(
+            name="nvidia-smi disponible",
+            ok=False,
+            remedy="Verifica que los drivers NVIDIA estén correctamente instalados.",
+            details=str(exc),
+        )
+    return CheckResult(
+        name="nvidia-smi disponible",
+        ok=ok,
+        remedy="Conecta una GPU NVIDIA compatible o revisa la instalación del driver.",
+        details=details,
+    )
+
+
 def check_frontend_build() -> CheckResult:
     dist_dir = Path("frontend/dist")
     index_file = dist_dir / "index.html"
@@ -152,6 +229,88 @@ def _load_settings():
         return get_settings()
     except Exception:
         return None
+
+
+def check_env_variables(settings) -> List[CheckResult]:
+    results: List[CheckResult] = []
+    secret_value = settings.jwt_secret
+    secret_ok = secret_value not in {
+        "",
+        "please-change-this-secret",
+        "change-me",
+        "super-secret",
+    }
+    results.append(
+        CheckResult(
+            name="JWT secret configurado",
+            ok=secret_ok,
+            remedy="Define GRABADORA_JWT_SECRET_KEY en .env con un valor aleatorio.",
+            details=None if secret_ok else "Establece un secreto distinto al de ejemplo.",
+        )
+    )
+    db_ok = bool(settings.database_url)
+    results.append(
+        CheckResult(
+            name="Cadena de base de datos definida",
+            ok=db_ok,
+            remedy="Configura GRABADORA_DATABASE_URL con SQLite, PostgreSQL u otra base soportada.",
+            details=settings.database_url if db_ok else "Sin cadena de conexión.",
+        )
+    )
+    access_ok = bool(getattr(settings, "s3_access_key", ""))
+    results.append(
+        CheckResult(
+            name="Credenciales de acceso a S3",
+            ok=access_ok,
+            remedy="Establece GRABADORA_S3_ACCESS_KEY en el archivo .env.",
+            details=None if access_ok else "Falta la clave de acceso a S3/MinIO.",
+        )
+    )
+    secret_key = getattr(settings, "s3_secret_key", None)
+    secret_ok = bool(getattr(secret_key, "get_secret_value", lambda: "")())
+    results.append(
+        CheckResult(
+            name="Clave secreta de S3 definida",
+            ok=secret_ok,
+            remedy="Completa GRABADORA_S3_SECRET_KEY con el secreto de MinIO/S3.",
+            details=None if secret_ok else "Se requiere la clave secreta de S3.",
+        )
+    )
+    bucket_audio_ok = bool(getattr(settings, "s3_bucket_audio", ""))
+    bucket_tx_ok = bool(getattr(settings, "s3_bucket_transcripts", ""))
+    results.append(
+        CheckResult(
+            name="Buckets de S3 configurados",
+            ok=bucket_audio_ok and bucket_tx_ok,
+            remedy="Configura GRABADORA_S3_BUCKET_AUDIO y GRABADORA_S3_BUCKET_TRANSCRIPTS.",
+            details=None if bucket_audio_ok and bucket_tx_ok else "Asegúrate de definir ambos buckets.",
+        )
+    )
+    return results
+
+
+def check_ports_available(ports: dict[int, str]) -> CheckResult:
+    busy: List[str] = []
+    for port, label in ports.items():
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            sock.bind(("127.0.0.1", port))
+        except OSError as exc:
+            busy.append(f"{port} ({label}): {exc}")
+        finally:
+            try:
+                sock.close()
+            except OSError:
+                pass
+    ok = not busy
+    details = "Todos los puertos están libres." if ok else "; ".join(busy)
+    return CheckResult(
+        name="Puertos disponibles",
+        ok=ok,
+        remedy="Libera los puertos ocupados o ajusta los puertos en el archivo .env.",
+        details=details,
+    )
 
 
 def check_redis_connection(url: str) -> CheckResult:
@@ -201,7 +360,13 @@ def check_database_connection(url: str) -> CheckResult:
         )
 
 
-def check_s3_connection(endpoint_url: str, access_key: str, secret_key: str, region: str) -> CheckResult:
+def check_s3_connection(
+    endpoint_url: str,
+    access_key: str,
+    secret_key: str,
+    region: str,
+    buckets: Iterable[str],
+) -> CheckResult:
     try:
         import boto3  # type: ignore
     except ImportError:
@@ -219,8 +384,22 @@ def check_s3_connection(endpoint_url: str, access_key: str, secret_key: str, reg
             aws_access_key_id=access_key,
             aws_secret_access_key=secret_key,
         )
-        client.list_buckets()
-        return CheckResult(name="S3/MinIO accesible", ok=True, remedy="El endpoint respondió correctamente.")
+        response = client.list_buckets()
+        available = {bucket.get("Name") for bucket in response.get("Buckets", [])}
+        missing = [bucket for bucket in buckets if bucket not in available]
+        if missing:
+            return CheckResult(
+                name="S3/MinIO accesible",
+                ok=False,
+                remedy="Crea los buckets configurados o revisa los permisos del usuario de S3.",
+                details=f"Faltan los buckets: {', '.join(missing)}",
+            )
+        return CheckResult(
+            name="S3/MinIO accesible",
+            ok=True,
+            remedy="El endpoint respondió correctamente.",
+            details=f"Buckets disponibles: {', '.join(sorted(available))}",
+        )
     except Exception as exc:  # pragma: no cover - depende del entorno
         return CheckResult(
             name="S3/MinIO accesible",
@@ -270,12 +449,14 @@ def run_checks(install_missing: bool = False, fix_frontend: bool = False, *, mod
     print("🔍 Comprobando entorno...")
     results: List[CheckResult] = []
     results.append(check_python_runtime())
+    results.append(check_node_runtime())
     python_results = check_python_packages()
     results.extend(python_results)
     results.extend(check_cli_tools())
     frontend_result = check_frontend_ready()
     results.append(frontend_result)
     results.append(check_ffmpeg_available())
+    results.append(check_gpu_status())
     results.append(check_frontend_build())
 
     settings = _load_settings()
@@ -296,10 +477,15 @@ def run_checks(install_missing: bool = False, fix_frontend: bool = False, *, mod
             check_s3_connection(
                 settings.s3_endpoint_url,
                 settings.s3_access_key,
-                settings.s3_secret_key,
+                settings.s3_secret_key.get_secret_value(),
                 settings.s3_region_name,
+                [settings.s3_bucket_audio, settings.s3_bucket_transcripts],
             )
         )
+    if settings is not None:
+        results.extend(check_env_variables(settings))
+
+    results.append(check_ports_available(DEFAULT_PORTS))
 
     for item in results:
         print(item.render())
