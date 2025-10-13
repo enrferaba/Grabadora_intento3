@@ -15,11 +15,36 @@ interface SseViewerProps {
 
 export function SseViewer({ tokens, status, error, onRetry }: SseViewerProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const stickToBottomRef = useRef(true);
+
+  useEffect(() => {
+    const node = containerRef.current;
+    if (!node) return;
+    const onScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = node;
+      const distance = scrollHeight - (scrollTop + clientHeight);
+      stickToBottomRef.current = distance <= 48;
+    };
+    node.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      node.removeEventListener("scroll", onScroll);
+    };
+  }, []);
 
   useEffect(() => {
     if (!containerRef.current) return;
+    if (!stickToBottomRef.current) return;
     containerRef.current.scrollTop = containerRef.current.scrollHeight;
   }, [tokens]);
+
+  useEffect(() => {
+    if (status === "idle") {
+      stickToBottomRef.current = true;
+      if (containerRef.current) {
+        containerRef.current.scrollTop = containerRef.current.scrollHeight;
+      }
+    }
+  }, [status]);
 
   const statusCopy: Record<SseViewerProps["status"], string> = {
     idle: "Listo para empezar",
