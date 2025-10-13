@@ -11,6 +11,8 @@ try:  # pragma: no cover - Python < 3.10
 except ImportError:  # pragma: no cover - fallback for typing.TypeAlias
     from typing_extensions import TypeAlias  # type: ignore[assignment]
 
+import importlib.util
+
 from .models import TranscriptionStatus
 
 try:  # pragma: no cover - optional dependency
@@ -39,9 +41,7 @@ try:  # pragma: no cover - optional dependency
 
         BaseModel.model_validate = _compat_model_validate  # type: ignore[attr-defined]
 
-    try:  # pragma: no cover - optional dependency
-        import email_validator  # type: ignore
-    except ImportError:  # pragma: no cover
+    if importlib.util.find_spec("email_validator") is None:  # pragma: no cover
         EmailStr = str  # type: ignore
 except ImportError:  # pragma: no cover
     EmailStr = str  # type: ignore

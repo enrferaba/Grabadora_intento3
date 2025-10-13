@@ -8,6 +8,7 @@ from contextvars import ContextVar
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Optional
+
 try:  # pragma: no cover - optional dependency
     from rq import get_current_job as rq_get_current_job
 except ImportError:  # pragma: no cover

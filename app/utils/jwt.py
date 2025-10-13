@@ -6,9 +6,9 @@ environment while still providing compatible tokens for the FastAPI layer.
 from __future__ import annotations
 
 import base64
-import json
-import hmac
 import hashlib
+import hmac
+import json
 import time
 from typing import Iterable, Mapping
 

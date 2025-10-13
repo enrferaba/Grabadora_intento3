@@ -8,7 +8,7 @@ import json
 import secrets
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Any, List, Optional
+from typing import List, Optional
 
 try:  # pragma: no cover - optional dependency
     from fastapi import Depends, HTTPException, status
@@ -113,7 +113,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
         expires_delta or timedelta(minutes=settings.jwt_expiration_minutes)
     )
     to_encode.update({"exp": int(expire.timestamp())})
-    return encode_jwt(to_encode, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+    return encode_jwt(to_encode, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 
 def authenticate_user(session: Session, email: str, password: str) -> Optional[User]:
@@ -137,7 +137,7 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> AuthenticatedUser: 
     try:
         payload = decode_jwt(
             token,
-            settings.jwt_secret_key,
+            settings.jwt_secret,
             algorithms=[settings.jwt_algorithm],
         )
         user_id = int(payload.get("sub"))

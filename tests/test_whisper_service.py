@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import sys
-import types
 import time
+import types
 from typing import List, Optional
 from urllib.error import HTTPError, URLError
 
@@ -70,7 +70,12 @@ def test_build_asr_options_includes_required_keys(monkeypatch):
     monkeypatch.setattr(whisper_service.settings, "whisper_compute_type", "float16", raising=False)
     monkeypatch.setattr(whisper_service.settings, "whisper_device", "cuda", raising=False)
     monkeypatch.setattr(whisper_service.settings, "whisper_use_faster", False, raising=False)
-    monkeypatch.setattr(whisper_service.settings, "whisper_enable_speaker_diarization", False, raising=False)
+    monkeypatch.setattr(
+        whisper_service.settings,
+        "whisper_enable_speaker_diarization",
+        False,
+        raising=False,
+    )
     monkeypatch.setattr(whisper_service.settings, "whisper_batch_size", 4, raising=False)
 
     transcriber = whisper_service.WhisperXTranscriber("large-v2", "gpu")
@@ -102,7 +107,12 @@ def test_vad_loader_redirect_fallback(monkeypatch, tmp_path):
 
     def fake_download(self, debug_callback=None):
         if debug_callback:
-            debug_callback("vad-download", "descarga alternativa", {"path": str(fallback_file)}, "info")
+            debug_callback(
+                "vad-download",
+                "descarga alternativa",
+                {"path": str(fallback_file)},
+                "info",
+            )
         return fallback_file
 
     loader_calls = {"count": 0}
@@ -129,9 +139,15 @@ def test_vad_loader_redirect_fallback(monkeypatch, tmp_path):
     fake_fw = types.ModuleType("faster_whisper")
     fake_fw.transcribe = fake_transcribe
 
+    def fake_transcribe(*args, **kwargs):
+        return {"segments": [], "language": "es"}
+
+    def fake_load_model(*args, **kwargs):
+        return types.SimpleNamespace(transcribe=fake_transcribe)
+
     fake_whisperx = types.SimpleNamespace(
         vad=fake_vad,
-        load_model=lambda *args, **kwargs: types.SimpleNamespace(transcribe=lambda *a, **k: {"segments": [], "language": "es"}),
+        load_model=fake_load_model,
         asr=types.SimpleNamespace(DEFAULT_ASR_OPTIONS={}, load_vad_model=original_loader),
         DiarizationPipeline=lambda **kwargs: None,
         load_audio=lambda path: [],
@@ -149,7 +165,12 @@ def test_vad_loader_redirect_fallback(monkeypatch, tmp_path):
     monkeypatch.setattr(whisper_service.settings, "whisper_compute_type", "float16", raising=False)
     monkeypatch.setattr(whisper_service.settings, "whisper_device", "cuda", raising=False)
     monkeypatch.setattr(whisper_service.settings, "whisper_use_faster", False, raising=False)
-    monkeypatch.setattr(whisper_service.settings, "whisper_enable_speaker_diarization", False, raising=False)
+    monkeypatch.setattr(
+        whisper_service.settings,
+        "whisper_enable_speaker_diarization",
+        False,
+        raising=False,
+    )
     monkeypatch.setattr(whisper_service.settings, "whisper_batch_size", 4, raising=False)
     monkeypatch.setattr(whisper_service.settings, "models_cache_dir", tmp_path, raising=False)
 
@@ -227,7 +248,12 @@ def test_transcribe_falls_back_to_faster_whisper(monkeypatch, tmp_path):
     monkeypatch.setattr(whisper_service.settings, "whisper_compute_type", "int8", raising=False)
     monkeypatch.setattr(whisper_service.settings, "whisper_device", "cpu", raising=False)
     monkeypatch.setattr(whisper_service.settings, "whisper_use_faster", False, raising=False)
-    monkeypatch.setattr(whisper_service.settings, "whisper_enable_speaker_diarization", False, raising=False)
+    monkeypatch.setattr(
+        whisper_service.settings,
+        "whisper_enable_speaker_diarization",
+        False,
+        raising=False,
+    )
     monkeypatch.setattr(whisper_service.settings, "whisper_batch_size", 4, raising=False)
     monkeypatch.setattr(whisper_service.settings, "models_cache_dir", tmp_path, raising=False)
 
@@ -308,7 +334,12 @@ def test_vad_network_error_triggers_fallback(monkeypatch, tmp_path):
     monkeypatch.setattr(whisper_service.settings, "whisper_compute_type", "int8", raising=False)
     monkeypatch.setattr(whisper_service.settings, "whisper_device", "cpu", raising=False)
     monkeypatch.setattr(whisper_service.settings, "whisper_use_faster", False, raising=False)
-    monkeypatch.setattr(whisper_service.settings, "whisper_enable_speaker_diarization", False, raising=False)
+    monkeypatch.setattr(
+        whisper_service.settings,
+        "whisper_enable_speaker_diarization",
+        False,
+        raising=False,
+    )
     monkeypatch.setattr(whisper_service.settings, "whisper_batch_size", 4, raising=False)
     monkeypatch.setattr(whisper_service.settings, "models_cache_dir", tmp_path, raising=False)
 

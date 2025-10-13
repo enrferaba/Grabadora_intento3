@@ -1,146 +1,264 @@
-"""Application configuration with a lightweight settings loader.
-
-This module intentionally avoids heavy optional dependencies so that the
-project remains usable in constrained execution environments (like the
-exercise runner). Environment variables using the ``GRABADORA_`` prefix can
-override the defaults defined below.
-"""
+"""Application configuration handled with Pydantic models."""
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, fields
+import secrets
 from functools import lru_cache
-from typing import Any, Literal, get_args, get_origin
+from pathlib import Path
+from typing import Any, Literal
+
+from dotenv import dotenv_values
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, SecretStr
+
+ENV_PREFIX = "GRABADORA_"
+_PLACEHOLDER_SECRETS = {
+    "",
+    "please-change-this-secret",
+    "change-me",
+    "super-secret",
+    "local-dev-secret",
+}
 
 
-def _coerce(value: str, annotation: Any) -> Any:
-    """Best-effort coercion of environment variable values."""
+def _collect_env(prefix: str = ENV_PREFIX) -> dict[str, Any]:
+    """Load .env + OS variables and normalise keys."""
 
-    origin = get_origin(annotation)
-    if origin is Literal:
-        # literals are strings in our settings; trust the env override.
-        return value
-
-    if annotation in (str, Any):
-        return value
-    if annotation in (int, float):
-        return annotation(value)
-    if annotation is bool:
-        return value.lower() in {"1", "true", "yes", "on"}
-
-    if origin is list and get_args(annotation):  # pragma: no cover - unused today
-        subtype = get_args(annotation)[0]
-        return [
-            _coerce(item.strip(), subtype)
-            for item in value.split(",")
-            if item.strip()
-        ]
-
-    return value
+    raw: dict[str, Any] = {}
+    sources = [dotenv_values(".env"), os.environ]
+    for source in sources:
+        for key, value in source.items():
+            if value in (None, ""):
+                continue
+            key_upper = key.upper()
+            if key_upper.startswith(prefix):
+                stripped = key_upper[len(prefix) :]
+            else:
+                stripped = key_upper
+            raw[stripped] = value
+            raw[stripped.lower()] = value
+    return raw
 
 
-@dataclass
-class Settings:
+class Settings(BaseModel):
     """Central configuration for the transcription platform."""
 
-    api_title: str = "Grabadora"
-    api_version: str = "0.1.0"
-    api_description: str = (
-        "Streaming transcription service with queue, storage, and metrics."
+    model_config = ConfigDict(extra="ignore", populate_by_name=True, validate_assignment=False)
+
+    api_title: str = Field(default="Grabadora")
+    api_version: str = Field(default="0.1.0")
+    api_description: str = Field(
+        default="Streaming transcription service with queue, storage, and metrics.",
     )
-    app_name: str = "Grabadora"
+    app_name: str = Field(default="Grabadora")
 
-    redis_url: str = "redis://redis:6379/0"
-    rq_default_queue: str = "transcription"
-    rq_job_timeout: int = 1800
-    rq_result_ttl: int = 86400
-    rq_failure_ttl: int = 3600
-    queue_backend: Literal["auto", "redis", "memory"] = "auto"
-
-    database_url: str = (
-        "postgresql+psycopg2://postgres:postgres@db:5432/grabadora"
+    app_env: Literal["development", "staging", "production", "test"] = Field(
+        default="development",
+        validation_alias=AliasChoices("APP_ENV", "ENVIRONMENT"),
+    )
+    log_level: str = Field(
+        default="INFO",
+        validation_alias=AliasChoices("LOG_LEVEL"),
+    )
+    gpu_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("GPU_ENABLED"),
     )
 
-    s3_endpoint_url: str = "http://minio:9000"
-    s3_region_name: str = "us-east-1"
-    s3_access_key: str = "minioadmin"
-    s3_secret_key: str = "minioadmin"
-    s3_bucket_audio: str = "audio"
-    s3_bucket_transcripts: str = "transcripts"
-    s3_presigned_ttl: int = 86400
+    redis_url: str = Field(default="redis://redis:6379/0")
+    rq_default_queue: str = Field(default="transcription")
+    rq_job_timeout: int = Field(default=1800)
+    rq_result_ttl: int = Field(default=86400)
+    rq_failure_ttl: int = Field(default=3600)
+    queue_backend: Literal["auto", "redis", "memory"] = Field(default="auto")
 
-    storage_dir: str = "storage"
-    transcripts_dir: str = "transcripts"
-    audio_cache_dir: str = "audio-cache"
-    models_cache_dir: str = "models"
-    frontend_origin: str | None = None  # TODO(config): Define the exact SPA origin(s) before deploying.
-    frontend_origin_regex: str | None = None
+    database_url: str = Field(
+        default="postgresql+psycopg2://postgres:postgres@db:5432/grabadora",
+        validation_alias=AliasChoices("DATABASE_URL"),
+    )
 
-    max_upload_size_mb: int = 500
-    live_window_seconds: float = 5.0
-    live_window_overlap_seconds: float = 1.0
-    live_repeat_window_seconds: float = 2.0
-    live_repeat_max_duplicates: int = 3
+    s3_endpoint_url: str = Field(
+        default="http://minio:9000",
+        validation_alias=AliasChoices("S3_ENDPOINT", "S3_ENDPOINT_URL"),
+    )
+    s3_region_name: str = Field(default="us-east-1")
+    s3_access_key: str = Field(
+        default="minioadmin",
+        min_length=1,
+        validation_alias=AliasChoices("S3_ACCESS_KEY"),
+    )
+    s3_secret_key: SecretStr = Field(
+        default=SecretStr("minioadmin"),
+        validation_alias=AliasChoices("S3_SECRET_KEY"),
+    )
+    s3_bucket_audio: str = Field(
+        default="audio",
+        min_length=1,
+        validation_alias=AliasChoices("S3_BUCKET_AUDIO", "S3_BUCKET"),
+    )
+    s3_bucket_transcripts: str = Field(
+        default="transcripts",
+        min_length=1,
+        validation_alias=AliasChoices("S3_BUCKET_TRANSCRIPTS"),
+    )
+    s3_presigned_ttl: int = Field(default=86400, ge=60)
 
-    huggingface_token: str | None = None
-    google_client_id: str | None = None
-    google_client_secret: str | None = None
-    google_redirect_uri: str | None = None
+    storage_dir: str = Field(default="storage")
+    transcripts_dir: str = Field(default="transcripts")
+    audio_cache_dir: str = Field(default="audio-cache")
+    models_cache_dir: str = Field(default="models")
+    frontend_origin: str | None = Field(default=None)
+    frontend_origin_regex: str | None = Field(default=None)
 
-    enable_dummy_transcriber: bool = False
-    whisper_model_size: str = "large-v2"
-    whisper_device: str = "cuda"
-    whisper_compute_type: str = "float16"
-    whisper_language: str | None = None
-    whisper_use_faster: bool = True
-    whisper_enable_speaker_diarization: bool = False
-    whisper_batch_size: int = 4
-    whisper_condition_on_previous_text: bool = True
-    whisper_word_timestamps: bool = True
-    whisper_vad_mode: str = "auto"
-    whisper_vad_repo_id: str = "pyannote/segmentation"
-    whisper_vad_filename: str = "pytorch_model.bin"
-    whisper_force_cuda: bool = False
-    whisper_compression_ratio_threshold: float = 2.4
-    whisper_log_prob_threshold: float = -1.0
-    whisper_final_beam: int = 1
-    whisper_live_beam: int = 1
+    max_upload_size_mb: int = Field(default=500, ge=1)
+    live_window_seconds: float = Field(default=5.0, gt=0)
+    live_window_overlap_seconds: float = Field(default=1.0, ge=0)
+    live_repeat_window_seconds: float = Field(default=2.0, ge=0)
+    live_repeat_max_duplicates: int = Field(default=3, ge=0)
 
-    debug_event_limit: int = 500
+    huggingface_token: str | None = Field(default=None)
+    google_client_id: str | None = Field(default=None)
+    google_client_secret: str | None = Field(default=None)
+    google_redirect_uri: str | None = Field(default=None)
 
-    jwt_secret_key: str = "super-secret"
-    jwt_algorithm: str = "HS256"
-    jwt_expiration_minutes: int = 30
+    enable_dummy_transcriber: bool = Field(default=False)
+    whisper_model_size: str = Field(
+        default="large-v2",
+        validation_alias=AliasChoices("ASR_MODEL", "WHISPER_MODEL_SIZE"),
+    )
+    whisper_device: str = Field(default="cuda")
+    whisper_compute_type: str = Field(default="float16")
+    whisper_language: str | None = Field(default=None)
+    whisper_use_faster: bool = Field(default=True)
+    whisper_enable_speaker_diarization: bool = Field(default=False)
+    whisper_batch_size: int = Field(default=4, ge=1)
+    whisper_condition_on_previous_text: bool = Field(default=True)
+    whisper_word_timestamps: bool = Field(default=True)
+    whisper_vad_mode: str = Field(default="auto")
+    whisper_vad_repo_id: str = Field(default="pyannote/segmentation")
+    whisper_vad_filename: str = Field(default="pytorch_model.bin")
+    whisper_force_cuda: bool = Field(default=False)
+    whisper_compression_ratio_threshold: float = Field(default=2.4)
+    whisper_log_prob_threshold: float = Field(default=-1.0)
+    whisper_final_beam: int = Field(default=1, ge=1)
+    whisper_live_beam: int = Field(default=1, ge=1)
 
-    transcription_quantization: Literal["float32", "float16", "int8"] = "float16"
+    debug_event_limit: int = Field(default=500, ge=1)
 
-    prometheus_namespace: str = "grabadora"
+    jwt_secret_key: SecretStr = Field(
+        default=SecretStr("local-dev-secret"),
+        validation_alias=AliasChoices("JWT_SECRET", "JWT_SECRET_KEY"),
+    )
+    jwt_algorithm: str = Field(default="HS256")
+    jwt_expiration_minutes: int = Field(default=30, ge=1)
 
-    _env_prefix: str = "GRABADORA_"
+    transcription_quantization: Literal["float32", "float16", "int8"] = Field(
+        default="float16",
+        validation_alias=AliasChoices("TRANSCRIPTION_QUANTIZATION"),
+    )
 
-    def __post_init__(self) -> None:
-        for field in fields(self):
-            if field.name.startswith("_"):
-                continue
-            env_name = f"{self._env_prefix}{field.name.upper()}"
-            raw_value = os.getenv(env_name)
-            if raw_value is None:
-                raw_value = os.getenv(field.name.upper())
-            if raw_value is None:
-                continue
-            try:
-                value = _coerce(raw_value, field.type)
-            except Exception:
-                # fall back to the raw string if coercion fails.
-                value = raw_value
-            setattr(self, field.name, value)
+    prometheus_namespace: str = Field(default="grabadora")
+
+    @property
+    def jwt_secret(self) -> str:
+        """Return the decrypted JWT secret string."""
+
+        return self.jwt_secret_key.get_secret_value()
+
+    @classmethod
+    def load(cls) -> "Settings":
+        data = _collect_env()
+        instance = cls.model_validate(data)
+        _validate_required_settings(instance)
+        return instance
 
 
 @lru_cache()
 def get_settings() -> Settings:
     """Return a cached ``Settings`` instance."""
 
-    return Settings()
+    return Settings.load()
+
+
+def _validate_required_settings(settings: Settings) -> None:
+    """Fail fast when essential secrets are missing or placeholders."""
+
+    missing: dict[str, Any] = {}
+    if settings.jwt_secret_key.get_secret_value() in _PLACEHOLDER_SECRETS:
+        if not _attempt_auto_secret(settings):
+            missing["GRABADORA_JWT_SECRET_KEY"] = "Define un secreto fuerte para JWT."
+    for bucket_key in (settings.s3_bucket_audio, settings.s3_bucket_transcripts):
+        if not bucket_key.strip():
+            missing["GRABADORA_S3_BUCKET_*"] = "Los buckets de audio y transcripciones no pueden estar vacíos."
+    if missing:
+        details = "; ".join(f"{key}: {reason}" for key, reason in missing.items())
+        raise ValueError(f"Configuración incompleta: {details}")
+
+
+def _attempt_auto_secret(settings: Settings) -> bool:
+    """Try to transparently generate a JWT secret for non-production environments."""
+
+    if settings.app_env == "production":
+        return False
+    new_secret = secrets.token_urlsafe(48)
+    settings.jwt_secret_key = SecretStr(new_secret)
+    canonical_key = f"{ENV_PREFIX}JWT_SECRET_KEY"
+    os.environ.setdefault(canonical_key, new_secret)
+    # Preserve compatibility with legacy environment keys consumed by external tooling.
+    os.environ.setdefault("JWT_SECRET", new_secret)
+    os.environ.setdefault("JWT_SECRET_KEY", new_secret)
+    _persist_secret_to_env(new_secret)
+    print(
+        "⚠️  GRABADORA_JWT_SECRET_KEY usaba un valor de ejemplo. "
+        "Se generó y persistió un secreto aleatorio para este entorno.",
+    )
+    return True
+
+
+def _persist_secret_to_env(secret: str) -> None:
+    """Write the generated secret back to `.env` when possible."""
+
+    env_path = Path(".env")
+    try:
+        if env_path.exists():
+            contents = env_path.read_text(encoding="utf-8")
+        else:
+            contents = ""
+    except UnicodeDecodeError:
+        print(
+            "⚠️  No se pudo actualizar .env con el secreto generado (codificación no UTF-8). "
+            "Actualízalo manualmente.",
+        )
+        return
+
+    updated_lines: list[str] = []
+    replaced = False
+    for line in contents.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            updated_lines.append(line)
+            continue
+        key, _, _ = line.partition("=")
+        key_upper = key.strip().upper()
+        if key_upper in {"GRABADORA_JWT_SECRET_KEY", "JWT_SECRET", "JWT_SECRET_KEY"}:
+            updated_lines.append(f"GRABADORA_JWT_SECRET_KEY={secret}")
+            replaced = True
+        else:
+            updated_lines.append(line)
+
+    if not replaced:
+        if updated_lines and updated_lines[-1] != "":
+            updated_lines.append("")
+        updated_lines.append(f"GRABADORA_JWT_SECRET_KEY={secret}")
+
+    new_content = "\n".join(updated_lines).rstrip() + "\n"
+    try:
+        env_path.write_text(new_content, encoding="utf-8")
+    except OSError as exc:
+        print(
+            "⚠️  No se pudo escribir el nuevo GRABADORA_JWT_SECRET_KEY en .env:",
+            exc,
+        )
+        return
 
 
 # Backwards compatibility alias for code that expects a module-level ``settings``.

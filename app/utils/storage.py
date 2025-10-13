@@ -13,7 +13,6 @@ from fastapi import UploadFile
 
 from ..config import settings
 
-
 _SAFE_COMPONENT = re.compile(r"[^A-Za-z0-9._-]+")
 
 
