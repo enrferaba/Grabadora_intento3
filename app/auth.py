@@ -1,4 +1,5 @@
 """Authentication utilities with minimal dependencies."""
+
 from __future__ import annotations
 
 import base64
@@ -14,11 +15,14 @@ try:  # pragma: no cover - optional dependency
     from fastapi import Depends, HTTPException, status
     from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 except ImportError:  # pragma: no cover
+
     def Depends(dependency=None):  # type: ignore
         return None
 
     class HTTPException(Exception):  # type: ignore
-        def __init__(self, status_code: int, detail: str, headers: Optional[dict] = None) -> None:
+        def __init__(
+            self, status_code: int, detail: str, headers: Optional[dict] = None
+        ) -> None:
             super().__init__(detail)
             self.status_code = status_code
             self.detail = detail
@@ -40,6 +44,7 @@ except ImportError:  # pragma: no cover
         def __init__(self, *args, **kwargs) -> None:
             raise RuntimeError("FastAPI is required for OAuth2PasswordRequestForm")
 
+
 try:  # pragma: no cover - optional dependency
     from sqlalchemy.orm import Session
 except ImportError:  # pragma: no cover
@@ -52,6 +57,7 @@ from app.utils.jwt import decode_jwt, encode_jwt
 try:  # pragma: no cover - optional dependency
     from models.user import Profile, User
 except ImportError:  # pragma: no cover
+
     class Profile:  # type: ignore
         id: int
         name: str
@@ -62,6 +68,7 @@ except ImportError:  # pragma: no cover
         email: str
         hashed_password: str
         profiles: list
+
 
 oauth2_scheme = None
 try:  # pragma: no cover - optional dependency
@@ -96,7 +103,9 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         return False
     salt = base64.b64decode(salt_b64.encode("utf-8"))
     expected = base64.b64decode(digest_b64.encode("utf-8"))
-    computed = hashlib.pbkdf2_hmac("sha256", plain_password.encode("utf-8"), salt, 390000)
+    computed = hashlib.pbkdf2_hmac(
+        "sha256", plain_password.encode("utf-8"), salt, 390000
+    )
     return hmac.compare_digest(expected, computed)
 
 
@@ -169,6 +178,8 @@ def login(form_data: OAuth2PasswordRequestForm = Depends()) -> dict:  # type: ig
     with session_scope() as session:
         user = authenticate_user(session, form_data.username, form_data.password)
         if not user:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect credentials")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect credentials"
+            )
         access_token = create_access_token({"sub": str(user.id)})
         return {"access_token": access_token, "token_type": "bearer"}

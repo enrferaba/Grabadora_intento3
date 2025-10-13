@@ -129,7 +129,9 @@ class TranscriptionService:
             return self._simulate_transcription(audio_path, token_callback, language)
 
         try:
-            segments_iterable, info = self.model.transcribe(str(audio_path), language=language)
+            segments_iterable, info = self.model.transcribe(
+                str(audio_path), language=language
+            )
         except RuntimeError:
             # ``model`` property raises ``RuntimeError`` when faster-whisper is missing. In that
             # scenario we provide a deterministic simulated transcript so the rest of the app can
@@ -137,7 +139,9 @@ class TranscriptionService:
             logger.warning("faster-whisper unavailable, returning simulated transcript")
             return self._simulate_transcription(audio_path, token_callback, language)
         except Exception:  # pragma: no cover - defensive fallback
-            logger.exception("Unable to run faster-whisper; returning simulated transcript")
+            logger.exception(
+                "Unable to run faster-whisper; returning simulated transcript"
+            )
             return self._simulate_transcription(audio_path, token_callback, language)
 
         segments = list(segments_iterable)
@@ -152,11 +156,19 @@ class TranscriptionService:
                     continue
                 transcript_tokens.append(text)
                 if token_callback:
-                    payload = {"text": text, "t0": start, "t1": end, "segment": segment_index}
+                    payload = {
+                        "text": text,
+                        "t0": start,
+                        "t1": end,
+                        "segment": segment_index,
+                    }
                     try:
                         token_callback(payload)
                     except Exception:  # pragma: no cover - defensive logging
-                        logger.exception("Token callback raised", extra={"payload": json.dumps(payload)})
+                        logger.exception(
+                            "Token callback raised",
+                            extra={"payload": json.dumps(payload)},
+                        )
 
         transcript_text = "".join(transcript_tokens).strip()
         logger.info(
@@ -190,9 +202,7 @@ class TranscriptionService:
     ) -> dict:
         file_name = audio_path.name or "audio"
         simulated_language = language or "es"
-        message = (
-            f"Transcripción simulada para {file_name}. Instala faster-whisper para obtener resultados reales."
-        )
+        message = f"Transcripción simulada para {file_name}. Instala faster-whisper para obtener resultados reales."
         words = message.split(" ")
         pieces: list[str] = []
         for index, word in enumerate(words):
@@ -200,17 +210,29 @@ class TranscriptionService:
             token_text = f"{word}{suffix}"
             pieces.append(token_text)
             if token_callback:
-                payload = {"text": token_text, "t0": index * 0.6, "t1": (index + 1) * 0.6, "segment": index}
+                payload = {
+                    "text": token_text,
+                    "t0": index * 0.6,
+                    "t1": (index + 1) * 0.6,
+                    "segment": index,
+                }
                 try:
                     token_callback(payload)
                 except Exception:  # pragma: no cover - defensive
-                    logger.exception("Token callback raised during simulation", extra={"payload": json.dumps(payload)})
+                    logger.exception(
+                        "Token callback raised during simulation",
+                        extra={"payload": json.dumps(payload)},
+                    )
 
         transcript_text = "".join(pieces).strip()
         duration = round(len(words) * 0.6, 2)
         logger.info(
             "Generated simulated transcript",
-            extra={"file": file_name, "language": simulated_language, "duration": duration},
+            extra={
+                "file": file_name,
+                "language": simulated_language,
+                "duration": duration,
+            },
         )
         return {
             "text": transcript_text,

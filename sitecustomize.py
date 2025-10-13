@@ -1,4 +1,5 @@
 """Compatibility hooks for third-party dependencies during testing."""
+
 from __future__ import annotations
 
 import inspect

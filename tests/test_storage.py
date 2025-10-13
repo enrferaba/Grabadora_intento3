@@ -22,7 +22,9 @@ class DummyClient:
 
 def test_upload_transcript(monkeypatch):
     client = DummyClient()
-    monkeypatch.setattr("storage.s3.boto3", SimpleNamespace(client=lambda *args, **kwargs: client))
+    monkeypatch.setattr(
+        "storage.s3.boto3", SimpleNamespace(client=lambda *args, **kwargs: client)
+    )
 
     storage = S3StorageClient()
     storage.ensure_buckets()
