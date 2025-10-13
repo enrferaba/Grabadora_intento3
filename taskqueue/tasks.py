@@ -5,7 +5,7 @@ import json
 import logging
 import tempfile
 from contextvars import ContextVar
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Optional
 try:  # pragma: no cover - optional dependency
@@ -51,7 +51,7 @@ def _update_job_meta(meta: dict) -> None:
     job.meta.setdefault("progress", 0)
     job.meta.setdefault("segment", 0)
     job.meta.update(meta)
-    job.meta["updated_at"] = datetime.utcnow().isoformat()
+    job.meta["updated_at"] = datetime.now(UTC).isoformat()
     try:
         job.save_meta()
     except Exception:  # pragma: no cover - fallback queue has no persistence
@@ -97,7 +97,7 @@ def transcribe_job(
                 transcript.status = "transcribing"
                 transcript.language = language or transcript.language
                 transcript.quality_profile = quality_profile or transcript.quality_profile
-                transcript.updated_at = datetime.utcnow()
+                transcript.updated_at = datetime.now(UTC)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         audio_path = Path(tmpdir) / Path(audio_key).name
@@ -172,7 +172,7 @@ def transcribe_job(
                 transcript.language = result["language"]
                 transcript.duration_seconds = result.get("duration")
                 transcript.segments = json.dumps(result.get("segments", []))
-                transcript.completed_at = datetime.utcnow()
+                transcript.completed_at = datetime.now(UTC)
                 transcript.updated_at = transcript.completed_at
 
     logger.info(

@@ -1,6 +1,6 @@
 import { CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
-import { qualityProfiles } from "@/lib/api";
+import { useAppConfig, useQualityProfiles } from "@/lib/hooks";
 
 const metricStyle: CSSProperties = {
   flex: "1 1 150px",
@@ -23,6 +23,12 @@ const metricLabelStyle: CSSProperties = {
 
 export function HeroBanner() {
   const navigate = useNavigate();
+  const { profiles } = useQualityProfiles();
+  const { config } = useAppConfig();
+
+  const queueBackend = config?.queue_backend ?? "auto";
+  const uploadLimit = config?.max_upload_size_mb ? `${config.max_upload_size_mb} MB` : "–";
+  const storageMode = ((config?.features?.storage as { mode?: string } | undefined)?.mode ?? "automático").toString();
 
   return (
     <section className="hero">
@@ -57,22 +63,22 @@ export function HeroBanner() {
       </div>
       <div className="hero__metrics">
         <div style={metricStyle}>
-          <span style={metricValueStyle}>0&nbsp;min</span>
-          <span style={metricLabelStyle}>Minutos restantes</span>
+          <span style={metricValueStyle}>{uploadLimit}</span>
+          <span style={metricLabelStyle}>Límite de subida</span>
         </div>
         <div style={metricStyle}>
-          <span style={metricValueStyle}>0</span>
-          <span style={metricLabelStyle}>En cola</span>
+          <span style={metricValueStyle}>{queueBackend.toUpperCase()}</span>
+          <span style={metricLabelStyle}>Cola en uso</span>
         </div>
         <div style={metricStyle}>
-          <span style={metricValueStyle}>–</span>
-          <span style={metricLabelStyle}>Perfil activo</span>
+          <span style={metricValueStyle}>{storageMode === "remote" ? "S3" : "Local"}</span>
+          <span style={metricLabelStyle}>Destino de archivos</span>
         </div>
       </div>
       <div className="hero__profiles">
-        {qualityProfiles().map((item) => (
+        {profiles.map((item) => (
           <div key={item.id} className="hero__profile-card">
-            <h4>{item.title}</h4>
+            <h4>{item.label}</h4>
             <p>{item.description}</p>
           </div>
         ))}
