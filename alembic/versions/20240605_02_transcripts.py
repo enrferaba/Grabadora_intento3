@@ -1,4 +1,5 @@
 """add transcripts table"""
+
 from __future__ import annotations
 
 import sqlalchemy as sa
@@ -16,12 +17,24 @@ def upgrade() -> None:
     op.create_table(
         "transcripts",
         sa.Column("id", sa.Integer(), primary_key=True),
-        sa.Column("user_id", sa.Integer(), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("profile_id", sa.Integer(), sa.ForeignKey("profiles.id", ondelete="SET NULL"), nullable=True),
+        sa.Column(
+            "user_id",
+            sa.Integer(),
+            sa.ForeignKey("users.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        sa.Column(
+            "profile_id",
+            sa.Integer(),
+            sa.ForeignKey("profiles.id", ondelete="SET NULL"),
+            nullable=True,
+        ),
         sa.Column("job_id", sa.String(length=64), nullable=False, unique=True),
         sa.Column("audio_key", sa.String(length=512), nullable=False),
         sa.Column("transcript_key", sa.String(length=512), nullable=True),
-        sa.Column("status", sa.String(length=32), nullable=False, server_default="queued"),
+        sa.Column(
+            "status", sa.String(length=32), nullable=False, server_default="queued"
+        ),
         sa.Column("language", sa.String(length=32), nullable=True),
         sa.Column("quality_profile", sa.String(length=32), nullable=True),
         sa.Column("title", sa.String(length=255), nullable=True),
@@ -29,8 +42,12 @@ def upgrade() -> None:
         sa.Column("segments", sa.Text(), nullable=True),
         sa.Column("duration_seconds", sa.Numeric(scale=2), nullable=True),
         sa.Column("error_message", sa.Text(), nullable=True),
-        sa.Column("created_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
-        sa.Column("updated_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
+        sa.Column(
+            "created_at", sa.DateTime(), nullable=False, server_default=sa.func.now()
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(), nullable=False, server_default=sa.func.now()
+        ),
         sa.Column("completed_at", sa.DateTime(), nullable=True),
     )
     op.create_index("ix_transcripts_user_id", "transcripts", ["user_id"])

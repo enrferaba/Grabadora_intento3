@@ -1,10 +1,20 @@
 """SQLAlchemy models describing users, profiles, usage metrics, and transcripts."""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import List, Optional
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    Text,
+)
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
@@ -22,7 +32,9 @@ class User(Base):
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(UTC), nullable=False)
 
-    profiles: List["Profile"] = relationship("Profile", back_populates="owner", cascade="all, delete-orphan")
+    profiles: List["Profile"] = relationship(
+        "Profile", back_populates="owner", cascade="all, delete-orphan"
+    )
     usage_meters: List["UsageMeter"] = relationship(
         "UsageMeter", back_populates="user", cascade="all, delete-orphan"
     )
@@ -38,7 +50,9 @@ class Profile(Base):
     __allow_unmapped__ = True
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     name = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(UTC), nullable=False)
@@ -59,8 +73,15 @@ class UsageMeter(Base):
     __allow_unmapped__ = True
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    profile_id = Column(Integer, ForeignKey("profiles.id", ondelete="SET NULL"), nullable=True, index=True)
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    profile_id = Column(
+        Integer,
+        ForeignKey("profiles.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     month = Column(String(7), nullable=False, index=True)
     transcription_seconds = Column(Numeric(scale=2), default=0)
     transcription_cost = Column(Numeric(scale=4), default=0)
@@ -81,8 +102,15 @@ class Transcript(Base):
     __allow_unmapped__ = True
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    profile_id = Column(Integer, ForeignKey("profiles.id", ondelete="SET NULL"), nullable=True, index=True)
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    profile_id = Column(
+        Integer,
+        ForeignKey("profiles.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     job_id = Column(String(64), unique=True, nullable=False, index=True)
     audio_key = Column(String(512), nullable=False)
     transcript_key = Column(String(512), nullable=True)
