@@ -4,6 +4,7 @@ Revision ID: 20240605_03_transcript_notes
 Revises: 20240605_02_transcripts
 Create Date: 2024-06-05 00:00:00
 """
+
 from __future__ import annotations
 
 from alembic import op

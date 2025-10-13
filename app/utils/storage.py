@@ -145,7 +145,9 @@ def ensure_normalized_audio(source: Path) -> Path:
         str(tmp_path),
     ]
     try:
-        subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        subprocess.run(
+            command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
         tmp_path.replace(cache_path)
     except subprocess.CalledProcessError as exc:
         tmp_path.unlink(missing_ok=True)

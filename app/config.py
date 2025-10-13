@@ -5,6 +5,7 @@ project remains usable in constrained execution environments (like the
 exercise runner). Environment variables using the ``GRABADORA_`` prefix can
 override the defaults defined below.
 """
+
 from __future__ import annotations
 
 import os
@@ -31,9 +32,7 @@ def _coerce(value: str, annotation: Any) -> Any:
     if origin is list and get_args(annotation):  # pragma: no cover - unused today
         subtype = get_args(annotation)[0]
         return [
-            _coerce(item.strip(), subtype)
-            for item in value.split(",")
-            if item.strip()
+            _coerce(item.strip(), subtype) for item in value.split(",") if item.strip()
         ]
 
     return value
@@ -57,9 +56,7 @@ class Settings:
     rq_failure_ttl: int = 3600
     queue_backend: Literal["auto", "redis", "memory"] = "auto"
 
-    database_url: str = (
-        "postgresql+psycopg2://postgres:postgres@db:5432/grabadora"
-    )
+    database_url: str = "postgresql+psycopg2://postgres:postgres@db:5432/grabadora"
 
     s3_endpoint_url: str = "http://minio:9000"
     s3_region_name: str = "us-east-1"
@@ -73,7 +70,9 @@ class Settings:
     transcripts_dir: str = "transcripts"
     audio_cache_dir: str = "audio-cache"
     models_cache_dir: str = "models"
-    frontend_origin: str | None = None  # TODO(config): Define the exact SPA origin(s) before deploying.
+    frontend_origin: str | None = (
+        None  # TODO(config): Define the exact SPA origin(s) before deploying.
+    )
     frontend_origin_regex: str | None = None
 
     max_upload_size_mb: int = 500

@@ -93,7 +93,9 @@ def _torch_cuda_available() -> bool:
         return False
     try:
         return bool(torch.cuda.is_available())
-    except Exception:  # pragma: no cover - defensive, torch can raise on misconfiguration
+    except (
+        Exception
+    ):  # pragma: no cover - defensive, torch can raise on misconfiguration
         return False
 
 
@@ -173,7 +175,9 @@ _model_futures: Dict[Tuple[str, str], Future] = {}
 _model_executor = ThreadPoolExecutor(max_workers=2)
 
 
-def _model_progress_key(model_size: Optional[str], device: Optional[str]) -> Tuple[str, str]:
+def _model_progress_key(
+    model_size: Optional[str], device: Optional[str]
+) -> Tuple[str, str]:
     normalized_model = (model_size or settings.whisper_model_size or "large-v2").strip()
     if not normalized_model:
         normalized_model = settings.whisper_model_size or "large-v2"
@@ -215,7 +219,9 @@ def _update_model_progress(
         return _copy_model_info(current)
 
 
-def get_model_preparation_status(model_size: Optional[str], device: Optional[str]) -> ModelPreparationInfo:
+def get_model_preparation_status(
+    model_size: Optional[str], device: Optional[str]
+) -> ModelPreparationInfo:
     key = _model_progress_key(model_size, device)
     with _model_progress_lock:
         info = _model_progress.get(key)
@@ -321,7 +327,9 @@ def _prepare_model_task(model_size: str, device: str) -> None:
 
     try:
         callback(5, f"Comprobando caché de {model_size} ({device}).")
-        transcriber = prepare_transcriber(model_size, device, progress_callback=callback)
+        transcriber = prepare_transcriber(
+            model_size, device, progress_callback=callback
+        )
         effective_raw: Optional[str]
         effective_callable = getattr(transcriber, "effective_device", None)
         if callable(effective_callable):
@@ -381,7 +389,9 @@ def _prepare_model_task(model_size: str, device: str) -> None:
         )
 
 
-def request_model_preparation(model_size: Optional[str], device: Optional[str]) -> ModelPreparationInfo:
+def request_model_preparation(
+    model_size: Optional[str], device: Optional[str]
+) -> ModelPreparationInfo:
     key = _model_progress_key(model_size, device)
     info = get_model_preparation_status(model_size, device)
     if info.status == "ready":
@@ -396,8 +406,12 @@ def request_model_preparation(model_size: Optional[str], device: Optional[str]) 
                 max(info.progress, 1),
                 f"Preparando {resolved_model} en {resolved_device}…",
             )
-            _model_futures[key] = _model_executor.submit(_prepare_model_task, resolved_model, resolved_device)
+            _model_futures[key] = _model_executor.submit(
+                _prepare_model_task, resolved_model, resolved_device
+            )
     return get_model_preparation_status(model_size, device)
+
+
 def _resolve_cpu_threads() -> int:
     configured = getattr(settings, "cpu_threads", None)
     if configured:
@@ -440,7 +454,9 @@ def _ensure_langdet_model(device: str) -> Optional[FasterWhisperModel]:
                     download_root=str(getattr(settings, "models_cache_dir", ".")),
                 )
             except Exception as exc:  # pragma: no cover - optional best-effort helper
-                logger.debug("No se pudo cargar modelo tiny para detección rápida: %s", exc)
+                logger.debug(
+                    "No se pudo cargar modelo tiny para detección rápida: %s", exc
+                )
                 _langdet_model = None
         return _langdet_model
 
@@ -448,7 +464,9 @@ def _ensure_langdet_model(device: str) -> Optional[FasterWhisperModel]:
 def _detect_language_fast(
     audio_path: Path,
     device: str,
-    debug_callback: Optional[Callable[[str, str, Optional[Dict[str, object]], str], None]] = None,
+    debug_callback: Optional[
+        Callable[[str, str, Optional[Dict[str, object]], str], None]
+    ] = None,
 ) -> Optional[str]:
     model = _ensure_langdet_model(device)
     if model is None:
@@ -504,7 +522,9 @@ class BaseTranscriber:
         beam_size: Optional[int] = None,
         *,
         decode_options: Optional[Dict[str, Any]] = None,
-        debug_callback: Optional[Callable[[str, str, Optional[Dict[str, object]], str], None]] = None,
+        debug_callback: Optional[
+            Callable[[str, str, Optional[Dict[str, object]], str], None]
+        ] = None,
     ) -> TranscriptionResult:
         raise NotImplementedError
 
@@ -528,9 +548,13 @@ class DummyTranscriber(BaseTranscriber):
         beam_size: Optional[int] = None,
         *,
         decode_options: Optional[Dict[str, Any]] = None,
-        debug_callback: Optional[Callable[[str, str, Optional[Dict[str, object]], str], None]] = None,
+        debug_callback: Optional[
+            Callable[[str, str, Optional[Dict[str, object]], str], None]
+        ] = None,
     ) -> TranscriptionResult:  # pragma: no cover - trivial
-        logger.warning("Using DummyTranscriber, install whisperx to enable real transcription")
+        logger.warning(
+            "Using DummyTranscriber, install whisperx to enable real transcription"
+        )
         dummy_text = f"Transcripción simulada para {audio_path.name}"
         if debug_callback:
             debug_callback(
@@ -543,7 +567,9 @@ class DummyTranscriber(BaseTranscriber):
             text=dummy_text,
             language=language or "es",
             duration=None,
-            segments=[SegmentResult(start=0, end=0, speaker="SPEAKER_00", text=dummy_text)],
+            segments=[
+                SegmentResult(start=0, end=0, speaker="SPEAKER_00", text=dummy_text)
+            ],
             runtime_seconds=0.0,
         )
 
@@ -697,7 +723,9 @@ class WhisperXTranscriber(BaseTranscriber):
             for key, value in normalized.items():
                 assembled.setdefault(key, value)
             normalized = assembled
-        except Exception:  # pragma: no cover - only triggered when faster-whisper not present
+        except (
+            Exception
+        ):  # pragma: no cover - only triggered when faster-whisper not present
             pass
 
         self._cached_asr_options = normalized
@@ -797,9 +825,7 @@ class WhisperXTranscriber(BaseTranscriber):
                         {"status_code": status_code, "error": str(exc)},
                         "warning",
                     )
-                self._disabled_reason = (
-                    "Autenticación de HuggingFace obligatoria para usar whisperx con diarización."
-                )
+                self._disabled_reason = "Autenticación de HuggingFace obligatoria para usar whisperx con diarización."
                 return None
             logger.error("No se pudo descargar el modelo VAD: %s", exc)
             if debug_callback:
@@ -817,7 +843,9 @@ class WhisperXTranscriber(BaseTranscriber):
         try:
             vad_module = getattr(whisperx, "vad")
         except Exception:
-            logger.debug("Módulo VAD de whisperx no disponible para parchear", exc_info=True)
+            logger.debug(
+                "Módulo VAD de whisperx no disponible para parchear", exc_info=True
+            )
             return
 
         original_loader = getattr(vad_module, "load_vad_model", None)
@@ -835,15 +863,22 @@ class WhisperXTranscriber(BaseTranscriber):
                     debug_callback(
                         "vad-download",
                         "Descarga VAD redirigida",
-                        {"code": err.code, "url": getattr(vad_module, "VAD_SEGMENTATION_URL", "")},
+                        {
+                            "code": err.code,
+                            "url": getattr(vad_module, "VAD_SEGMENTATION_URL", ""),
+                        },
                         "warning",
                     )
                 if err.code in {301, 302, 307, 308, 401, 403}:
-                    fallback_path = self._download_vad_weights(debug_callback=debug_callback)
+                    fallback_path = self._download_vad_weights(
+                        debug_callback=debug_callback
+                    )
                     if fallback_path:
                         options = dict(options)
                         options["segmentation_path"] = str(fallback_path)
-                        return original_loader(device, use_auth_token=use_auth_token, **options)
+                        return original_loader(
+                            device, use_auth_token=use_auth_token, **options
+                        )
                     raise WhisperXVADUnavailableError(
                         f"VAD model requires authentication (HTTP {err.code})"
                     ) from err
@@ -857,8 +892,12 @@ class WhisperXTranscriber(BaseTranscriber):
                         {"error": str(err)},
                         "warning",
                     )
-                self._disabled_reason = "No se pudo descargar el VAD requerido por WhisperX (error de red)."
-                raise WhisperXVADUnavailableError("Unable to download VAD model (network error)") from err
+                self._disabled_reason = (
+                    "No se pudo descargar el VAD requerido por WhisperX (error de red)."
+                )
+                raise WhisperXVADUnavailableError(
+                    "Unable to download VAD model (network error)"
+                ) from err
             except Exception as err:
                 # Cualquier otra excepción inesperada (por ejemplo, errores de socket en
                 # entornos sin red) debería activar igualmente el modo fallback para
@@ -871,8 +910,12 @@ class WhisperXTranscriber(BaseTranscriber):
                         {"error": str(err)},
                         "warning",
                     )
-                self._disabled_reason = "Error inesperado descargando el modelo VAD de WhisperX."
-                raise WhisperXVADUnavailableError("Unexpected error downloading VAD model") from err
+                self._disabled_reason = (
+                    "Error inesperado descargando el modelo VAD de WhisperX."
+                )
+                raise WhisperXVADUnavailableError(
+                    "Unexpected error downloading VAD model"
+                ) from err
 
         patched_loader._app_patched = True  # type: ignore[attr-defined]
         vad_module.load_vad_model = patched_loader  # type: ignore[attr-defined]
@@ -891,10 +934,18 @@ class WhisperXTranscriber(BaseTranscriber):
 
         current_url = getattr(vad_module, "VAD_SEGMENTATION_URL", "")
         if isinstance(current_url, str) and current_url.startswith("http://"):
-            setattr(vad_module, "VAD_SEGMENTATION_URL", current_url.replace("http://", "https://", 1))
+            setattr(
+                vad_module,
+                "VAD_SEGMENTATION_URL",
+                current_url.replace("http://", "https://", 1),
+            )
         self._vad_patch_done = True
 
-    def _ensure_model(self, debug_callback=None, progress_callback: Optional[Callable[[int, str], None]] = None):
+    def _ensure_model(
+        self,
+        debug_callback=None,
+        progress_callback: Optional[Callable[[int, str], None]] = None,
+    ):
         progress_key = _model_progress_key(self.model_size, self.device_preference)
         tracker = _progress_callback_factory(progress_key)
         if progress_callback is None:
@@ -914,7 +965,11 @@ class WhisperXTranscriber(BaseTranscriber):
             preferred = self.device_preference or settings.whisper_device
             device = self._normalize_device(preferred)
             runtime_cuda_available = is_cuda_runtime_available()
-            forced_cuda = device == "cuda" and settings.whisper_force_cuda and not runtime_cuda_available
+            forced_cuda = (
+                device == "cuda"
+                and settings.whisper_force_cuda
+                and not runtime_cuda_available
+            )
             compute_type = self._compute_type_for_device(device)
             if forced_cuda:
                 logger.info("Forzando carga de whisperx %s en CUDA", self.model_size)
@@ -935,7 +990,9 @@ class WhisperXTranscriber(BaseTranscriber):
                     "info",
                 )
             if progress_callback:
-                progress_callback(15, f"Descargando modelo {self.model_size} ({device}).")
+                progress_callback(
+                    15, f"Descargando modelo {self.model_size} ({device})."
+                )
             self._patch_default_asr_options()
             self._patch_vad_loader(debug_callback=debug_callback)
             try:
@@ -949,9 +1006,7 @@ class WhisperXTranscriber(BaseTranscriber):
             except WhisperXVADUnavailableError:
                 self._model = None
                 if not self._disabled_reason:
-                    self._disabled_reason = (
-                        "WhisperX no está disponible porque el modelo de VAD requiere autenticación."
-                    )
+                    self._disabled_reason = "WhisperX no está disponible porque el modelo de VAD requiere autenticación."
                 _update_model_progress(
                     progress_key,
                     "error",
@@ -1006,13 +1061,18 @@ class WhisperXTranscriber(BaseTranscriber):
                         {"enabled": True},
                         "info",
                     )
-        if settings.whisper_enable_speaker_diarization and self._diarize_pipeline is None:
+        if (
+            settings.whisper_enable_speaker_diarization
+            and self._diarize_pipeline is None
+        ):
             logger.info("Loading diarization pipeline")
             token = getattr(settings, "huggingface_token", None) or None
             try:
                 self._diarize_pipeline = whisperx.DiarizationPipeline(  # type: ignore[attr-defined]
                     use_auth_token=token,
-                    device=self._normalize_device(self.device_preference or settings.whisper_device),
+                    device=self._normalize_device(
+                        self.device_preference or settings.whisper_device
+                    ),
                 )
                 if debug_callback:
                     debug_callback(
@@ -1034,7 +1094,10 @@ class WhisperXTranscriber(BaseTranscriber):
                         "warning",
                     )
         if self._model is not None and progress_callback:
-            progress_callback(100, f"WhisperX listo en {self._normalize_device(self.device_preference or settings.whisper_device)}.")
+            progress_callback(
+                100,
+                f"WhisperX listo en {self._normalize_device(self.device_preference or settings.whisper_device)}.",
+            )
 
     def _estimate_duration(self, audio_path: Path) -> Optional[float]:
         try:
@@ -1046,7 +1109,9 @@ class WhisperXTranscriber(BaseTranscriber):
             try:
                 audio = AudioSegment.from_file(audio_path)
                 return len(audio) / 1000.0
-            except Exception as exc:  # pragma: no cover - depends on ffmpeg availability
+            except (
+                Exception
+            ) as exc:  # pragma: no cover - depends on ffmpeg availability
                 logger.debug("Unable to estimate duration for %s: %s", audio_path, exc)
                 return None
 
@@ -1072,9 +1137,16 @@ class WhisperXTranscriber(BaseTranscriber):
         beam_size: Optional[int] = None,
         *,
         decode_options: Optional[Dict[str, Any]] = None,
-        debug_callback: Optional[Callable[[str, str, Optional[Dict[str, object]], str], None]] = None,
+        debug_callback: Optional[
+            Callable[[str, str, Optional[Dict[str, object]], str], None]
+        ] = None,
     ) -> TranscriptionResult:
-        def emit(stage: str, message: str, extra: Optional[Dict[str, object]] = None, level: str = "info") -> None:
+        def emit(
+            stage: str,
+            message: str,
+            extra: Optional[Dict[str, object]] = None,
+            level: str = "info",
+        ) -> None:
             if debug_callback:
                 debug_callback(stage, message, extra, level)
 
@@ -1103,14 +1175,18 @@ class WhisperXTranscriber(BaseTranscriber):
 
         assert self._model is not None
 
-        device = self._normalize_device(self.device_preference or settings.whisper_device)
+        device = self._normalize_device(
+            self.device_preference or settings.whisper_device
+        )
         preferred = (self.device_preference or settings.whisper_device or "").lower()
         if preferred in {"cuda", "gpu"} and device != "cuda":
             emit(
                 "device.unavailable",
                 "CUDA no está disponible para WhisperX; se usará CPU",
                 {
-                    "requested": self.device_preference or settings.whisper_device or "auto",
+                    "requested": self.device_preference
+                    or settings.whisper_device
+                    or "auto",
                     "torch_cuda": _torch_cuda_available(),
                     "ctranslate2_cuda": _ctranslate_cuda_available(),
                 },
@@ -1125,7 +1201,10 @@ class WhisperXTranscriber(BaseTranscriber):
         emit(
             "transcribe.start",
             "Comenzando transcripción",
-            {"filename": audio_path.name, "language": language or settings.whisper_language},
+            {
+                "filename": audio_path.name,
+                "language": language or settings.whisper_language,
+            },
         )
         audio = whisperx.load_audio(str(audio_path))
         start = time.perf_counter()
@@ -1160,18 +1239,18 @@ class WhisperXTranscriber(BaseTranscriber):
         emit(
             "transcribe.completed",
             "Transcripción finalizada",
-            {"runtime_seconds": runtime, "segment_count": len(model_output.get("segments", []))},
+            {
+                "runtime_seconds": runtime,
+                "segment_count": len(model_output.get("segments", [])),
+            },
         )
 
         segments = model_output.get("segments", [])
         word_segments = None
         if (
-            (
-                getattr(settings, "whisper_enable_speaker_diarization", False)
-                or getattr(settings, "whisper_word_timestamps", False)
-            )
-            and self._align_model is not None
-        ):
+            getattr(settings, "whisper_enable_speaker_diarization", False)
+            or getattr(settings, "whisper_word_timestamps", False)
+        ) and self._align_model is not None:
             emit("align.start", "Alineando a nivel de palabra", None)
             try:
                 aligned = whisperx.align(  # type: ignore[attr-defined]
@@ -1197,7 +1276,10 @@ class WhisperXTranscriber(BaseTranscriber):
                 )
 
         diarized_segments = segments
-        if settings.whisper_enable_speaker_diarization and self._diarize_pipeline is not None:
+        if (
+            settings.whisper_enable_speaker_diarization
+            and self._diarize_pipeline is not None
+        ):
             emit("diarization.start", "Iniciando diarización", None)
             try:
                 diar = self._diarize_pipeline(audio)
@@ -1403,7 +1485,9 @@ class FasterWhisperTranscriber(BaseTranscriber):
         return devices
 
     @staticmethod
-    def _write_silence_wav(path: Path, duration: float = 0.5, sample_rate: int = 16_000) -> None:
+    def _write_silence_wav(
+        path: Path, duration: float = 0.5, sample_rate: int = 16_000
+    ) -> None:
         frames = max(1, int(duration * sample_rate))
         silence = array("h", [0] * frames)
         with wave.open(str(path), "wb") as handle:
@@ -1493,7 +1577,9 @@ class FasterWhisperTranscriber(BaseTranscriber):
             progress_callback = combined
         if self._model is not None:
             if progress_callback:
-                progress_callback(100, f"faster-whisper listo en {self._current_device()}.")
+                progress_callback(
+                    100, f"faster-whisper listo en {self._current_device()}."
+                )
             return
 
         def emit(
@@ -1540,7 +1626,11 @@ class FasterWhisperTranscriber(BaseTranscriber):
 
         for device in self._candidate_devices(initial_device):
             for compute_type in self._candidate_compute_types(device):
-                forced_cuda = device == "cuda" and settings.whisper_force_cuda and not runtime_cuda_available
+                forced_cuda = (
+                    device == "cuda"
+                    and settings.whisper_force_cuda
+                    and not runtime_cuda_available
+                )
                 emit(
                     "load-model",
                     "Cargando modelo faster-whisper de respaldo",
@@ -1569,9 +1659,13 @@ class FasterWhisperTranscriber(BaseTranscriber):
                     if device == "cuda" and torch is not None:
                         torch.cuda.empty_cache()
                     if progress_callback:
-                        progress_callback(85, f"Modelo {self.model_size} listo en {device}.")
+                        progress_callback(
+                            85, f"Modelo {self.model_size} listo en {device}."
+                        )
                     break
-                except Exception as exc:  # pragma: no cover - depends on runtime environment
+                except (
+                    Exception
+                ) as exc:  # pragma: no cover - depends on runtime environment
                     last_error = exc
                     if device == "cuda":
                         emit(
@@ -1584,7 +1678,10 @@ class FasterWhisperTranscriber(BaseTranscriber):
                             },
                             "warning",
                         )
-                        if not settings.whisper_force_cuda and _is_cuda_dependency_error(exc):
+                        if (
+                            not settings.whisper_force_cuda
+                            and _is_cuda_dependency_error(exc)
+                        ):
                             summary = _summarize_cuda_error(exc)
                             self._last_cuda_failure = summary
                             self._effective_device = "cpu"
@@ -1640,7 +1737,9 @@ class FasterWhisperTranscriber(BaseTranscriber):
             )
             if last_error is not None:
                 raise last_error
-            raise RuntimeError("Unable to load faster-whisper model with available configurations")
+            raise RuntimeError(
+                "Unable to load faster-whisper model with available configurations"
+            )
 
         if initial_device == "cuda" and loaded_device != "cuda":
             emit(
@@ -1657,7 +1756,9 @@ class FasterWhisperTranscriber(BaseTranscriber):
         if self._model is not None:
             self._warmup(emit)
             if progress_callback:
-                progress_callback(100, f"faster-whisper listo en {self._current_device()}.")
+                progress_callback(
+                    100, f"faster-whisper listo en {self._current_device()}."
+                )
 
     def effective_device(self) -> str:
         if self._model is not None:
@@ -1690,7 +1791,9 @@ class FasterWhisperTranscriber(BaseTranscriber):
         with self._lock:
             if self._model is not None:
                 if progress_callback:
-                    progress_callback(100, f"faster-whisper listo en {self._current_device()}.")
+                    progress_callback(
+                        100, f"faster-whisper listo en {self._current_device()}."
+                    )
                 return
             self._ensure_model(progress_callback=progress_callback)
 
@@ -1701,9 +1804,16 @@ class FasterWhisperTranscriber(BaseTranscriber):
         beam_size: Optional[int] = None,
         *,
         decode_options: Optional[Dict[str, Any]] = None,
-        debug_callback: Optional[Callable[[str, str, Optional[Dict[str, object]], str], None]] = None,
+        debug_callback: Optional[
+            Callable[[str, str, Optional[Dict[str, object]], str], None]
+        ] = None,
     ) -> TranscriptionResult:
-        def emit(stage: str, message: str, extra: Optional[Dict[str, object]] = None, level: str = "info") -> None:
+        def emit(
+            stage: str,
+            message: str,
+            extra: Optional[Dict[str, object]] = None,
+            level: str = "info",
+        ) -> None:
             if debug_callback:
                 debug_callback(stage, message, extra, level)
 
@@ -1733,10 +1843,14 @@ class FasterWhisperTranscriber(BaseTranscriber):
                     "warning",
                 )
                 batch_hint = None
-        resolved_beam = beam_size or options.pop("beam_size", settings.whisper_final_beam or 1)
+        resolved_beam = beam_size or options.pop(
+            "beam_size", settings.whisper_final_beam or 1
+        )
         resolved_beam = max(1, int(resolved_beam))
         options.setdefault("temperature", 0.0)
-        options.setdefault("condition_on_previous_text", settings.whisper_condition_on_previous_text)
+        options.setdefault(
+            "condition_on_previous_text", settings.whisper_condition_on_previous_text
+        )
         options.setdefault("word_timestamps", settings.whisper_word_timestamps)
         compression_ratio = settings.whisper_compression_ratio_threshold
         if compression_ratio is not None:
@@ -1844,7 +1958,9 @@ class FasterWhisperTranscriber(BaseTranscriber):
                             applied_batch_size = None
                     if bad_key in call_kwargs_base:
                         removed = True
-                        unsupported_options.setdefault(bad_key, call_kwargs_base.pop(bad_key))
+                        unsupported_options.setdefault(
+                            bad_key, call_kwargs_base.pop(bad_key)
+                        )
                     if supports_vad and bad_key == "vad_filter":
                         removed = True
                         unsupported_options.setdefault("vad_filter", use_vad)
@@ -1927,13 +2043,14 @@ class FasterWhisperTranscriber(BaseTranscriber):
             )
 
         language_result = getattr(info, "language", language)
-        duration = getattr(info, "duration", None) or self._estimate_duration(audio_path)
+        duration = getattr(info, "duration", None) or self._estimate_duration(
+            audio_path
+        )
         if duration is None:
             candidates = [segment.end for segment in segment_results if segment.end]
             if not candidates and segments is not None:
                 candidates = [
-                    float(getattr(segment, "end", 0.0))
-                    for segment in segments
+                    float(getattr(segment, "end", 0.0)) for segment in segments
                 ]
             if candidates:
                 duration = max(candidates)

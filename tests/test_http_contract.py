@@ -61,7 +61,10 @@ def api_context(tmp_path, monkeypatch):
     app = create_app()
 
     with session_scope() as session:
-        user = User(email=f"tester-{secrets.token_hex(4)}@example.com", hashed_password=get_password_hash("secret123"))
+        user = User(
+            email=f"tester-{secrets.token_hex(4)}@example.com",
+            hashed_password=get_password_hash("secret123"),
+        )
         profile = Profile(name="Default", description="Perfil por defecto")
         user.profiles.append(profile)
         session.add(user)
@@ -105,7 +108,9 @@ async def _asgi_request(
 ) -> Tuple[int, Headers, List[bytes]]:
     scope_headers = [(b"host", b"testserver")]
     if headers:
-        scope_headers.extend((name.lower().encode(), value.encode()) for name, value in headers)
+        scope_headers.extend(
+            (name.lower().encode(), value.encode()) for name, value in headers
+        )
     if "?" in path:
         path_only, query_string = path.split("?", 1)
         raw_query = query_string.encode()
@@ -181,7 +186,9 @@ def _encode_multipart_form(
         lines.append(value.encode())
     for field, (filename, content, content_type) in files.items():
         lines.append(f"--{boundary}".encode())
-        disposition = f'Content-Disposition: form-data; name="{field}"; filename="{filename}"'
+        disposition = (
+            f'Content-Disposition: form-data; name="{field}"; filename="{filename}"'
+        )
         lines.append(disposition.encode())
         lines.append(f"Content-Type: {content_type}".encode())
         lines.append(b"")
@@ -276,7 +283,9 @@ async def test_upload_and_stream_flow(api_context):
     events = _parse_sse_events(b"".join(sse_chunks).decode())
 
     assert any(event.get("event") == "completed" for event in events)
-    completed_event = next(event for event in events if event.get("event") == "completed")
+    completed_event = next(
+        event for event in events if event.get("event") == "completed"
+    )
     completed_payload = json.loads(completed_event["data"])
     assert completed_payload.get("job_id") == job_id
 
@@ -310,18 +319,14 @@ async def test_download_transcript(api_context):
 
     with session_scope() as session:
         transcript = (
-            session.query(Transcript)
-            .filter(Transcript.id == transcript_id)
-            .one()
+            session.query(Transcript).filter(Transcript.id == transcript_id).one()
         )
         transcript.transcript_key = object_name
         session.add(transcript)
         session.commit()
     with session_scope() as session:
         refreshed = (
-            session.query(Transcript)
-            .filter(Transcript.id == transcript_id)
-            .one()
+            session.query(Transcript).filter(Transcript.id == transcript_id).one()
         )
         assert refreshed.transcript_key == object_name
         assert refreshed.user_id == app.state.test_user.id  # type: ignore[attr-defined]
@@ -337,9 +342,13 @@ async def test_download_transcript(api_context):
     )
     body_text = b"".join(chunks).decode()
     assert status == 200, body_text
-    content_type_header = next((value for key, value in headers if key.lower() == "content-type"), "")
+    content_type_header = next(
+        (value for key, value in headers if key.lower() == "content-type"), ""
+    )
     assert "text/plain" in content_type_header
-    disposition = next((value for key, value in headers if key.lower() == "content-disposition"), "")
+    disposition = next(
+        (value for key, value in headers if key.lower() == "content-disposition"), ""
+    )
     assert "attachment" in disposition.lower()
     body = b"".join(chunks).decode()
     assert "#" in body

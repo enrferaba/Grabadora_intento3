@@ -1,4 +1,5 @@
 """RQ tasks responsible for executing transcription workloads."""
+
 from __future__ import annotations
 
 import json
@@ -8,6 +9,7 @@ from contextvars import ContextVar
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Optional
+
 try:  # pragma: no cover - optional dependency
     from rq import get_current_job as rq_get_current_job
 except ImportError:  # pragma: no cover
@@ -22,7 +24,9 @@ from storage.s3 import S3StorageClient
 logger = logging.getLogger(__name__)
 
 
-_current_job_ctx: ContextVar[Any | None] = ContextVar("grabadora_current_job", default=None)
+_current_job_ctx: ContextVar[Any | None] = ContextVar(
+    "grabadora_current_job", default=None
+)
 
 
 def set_current_job(job: Any | None) -> None:
@@ -58,7 +62,9 @@ def _update_job_meta(meta: dict) -> None:
         pass
 
 
-def _select_quantization(default_quantization: str, quality_profile: Optional[str]) -> str:
+def _select_quantization(
+    default_quantization: str, quality_profile: Optional[str]
+) -> str:
     if quality_profile is None:
         return default_quantization
     profile_map = {
@@ -81,7 +87,9 @@ def transcribe_job(
 
     settings = get_settings()
     storage_client = S3StorageClient()
-    quantization = _select_quantization(settings.transcription_quantization, quality_profile)
+    quantization = _select_quantization(
+        settings.transcription_quantization, quality_profile
+    )
     transcription_service = TranscriptionService(quantization=quantization)
 
     storage_client.ensure_buckets()
@@ -92,11 +100,17 @@ def transcribe_job(
 
     with session_scope() as session:
         if job is not None and user_id is not None:
-            transcript = session.query(Transcript).filter(Transcript.job_id == job.id).one_or_none()
+            transcript = (
+                session.query(Transcript)
+                .filter(Transcript.job_id == job.id)
+                .one_or_none()
+            )
             if transcript:
                 transcript.status = "transcribing"
                 transcript.language = language or transcript.language
-                transcript.quality_profile = quality_profile or transcript.quality_profile
+                transcript.quality_profile = (
+                    quality_profile or transcript.quality_profile
+                )
                 transcript.updated_at = datetime.now(UTC)
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -145,7 +159,9 @@ def transcribe_job(
                 }
             )
 
-        result = transcription_service.transcribe(audio_path, token_callback=on_token, language=language)
+        result = transcription_service.transcribe(
+            audio_path, token_callback=on_token, language=language
+        )
 
     transcript_key = f"{audio_key}.txt"
     storage_client.upload_transcript(result["text"], transcript_key)
@@ -165,7 +181,11 @@ def transcribe_job(
 
     with session_scope() as session:
         if job is not None:
-            transcript = session.query(Transcript).filter(Transcript.job_id == job.id).one_or_none()
+            transcript = (
+                session.query(Transcript)
+                .filter(Transcript.job_id == job.id)
+                .one_or_none()
+            )
             if transcript:
                 transcript.status = "completed"
                 transcript.transcript_key = transcript_key

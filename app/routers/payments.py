@@ -8,7 +8,12 @@ from sqlalchemy.orm import Session
 
 from ..database import get_session
 from ..models import PaymentStatus, PricingTier, Purchase, Transcription
-from ..schemas import CheckoutRequest, PricingTierSchema, PurchaseDetail, PurchaseResponse
+from ..schemas import (
+    CheckoutRequest,
+    PricingTierSchema,
+    PurchaseDetail,
+    PurchaseResponse,
+)
 from ..utils.payments import generate_checkout_link
 from ..utils.notes import generate_premium_notes
 
@@ -23,7 +28,9 @@ def _get_session() -> Session:
 
 
 @router.get("/plans", response_model=List[PricingTierSchema])
-def list_pricing_plans(session: Session = Depends(_get_session)) -> List[PricingTierSchema]:
+def list_pricing_plans(
+    session: Session = Depends(_get_session),
+) -> List[PricingTierSchema]:
     tiers = (
         session.query(PricingTier)
         .filter(PricingTier.is_active.is_(True))
@@ -38,7 +45,11 @@ def create_checkout(
     payload: CheckoutRequest,
     session: Session = Depends(_get_session),
 ) -> PurchaseResponse:
-    tier = session.query(PricingTier).filter_by(slug=payload.tier_slug, is_active=True).first()
+    tier = (
+        session.query(PricingTier)
+        .filter_by(slug=payload.tier_slug, is_active=True)
+        .first()
+    )
     if not tier:
         raise HTTPException(status_code=404, detail="Plan de precios no encontrado")
 
@@ -76,7 +87,9 @@ def create_checkout(
 
 
 @router.get("/{purchase_id}", response_model=PurchaseDetail)
-def get_purchase(purchase_id: int, session: Session = Depends(_get_session)) -> PurchaseDetail:
+def get_purchase(
+    purchase_id: int, session: Session = Depends(_get_session)
+) -> PurchaseDetail:
     purchase = session.get(Purchase, purchase_id)
     if purchase is None:
         raise HTTPException(status_code=404, detail="Compra no encontrada")
@@ -94,7 +107,9 @@ def get_purchase(purchase_id: int, session: Session = Depends(_get_session)) -> 
 
 
 @router.post("/{purchase_id}/confirm", response_model=PurchaseDetail)
-def confirm_purchase(purchase_id: int, session: Session = Depends(_get_session)) -> PurchaseDetail:
+def confirm_purchase(
+    purchase_id: int, session: Session = Depends(_get_session)
+) -> PurchaseDetail:
     purchase = session.get(Purchase, purchase_id)
     if purchase is None:
         raise HTTPException(status_code=404, detail="Compra no encontrada")
@@ -114,7 +129,9 @@ def confirm_purchase(purchase_id: int, session: Session = Depends(_get_session))
         )
         transcription.billing_reference = f"ORDER-{purchase.id:06d}"
         if not transcription.premium_notes:
-            transcription.premium_notes = generate_premium_notes(transcription.text or "")
+            transcription.premium_notes = generate_premium_notes(
+                transcription.text or ""
+            )
 
     session.commit()
 

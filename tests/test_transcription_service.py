@@ -33,7 +33,10 @@ class DummyModel:
 
 
 def test_transcription_streams_delta_tokens(monkeypatch):
-    service = TranscriptionService(quantization="float16", model_factory=lambda *args, **kwargs: DummyModel(*args, **kwargs))
+    service = TranscriptionService(
+        quantization="float16",
+        model_factory=lambda *args, **kwargs: DummyModel(*args, **kwargs),
+    )
 
     tokens: list[dict] = []
     result = service.transcribe(Path("dummy.wav"), token_callback=tokens.append)

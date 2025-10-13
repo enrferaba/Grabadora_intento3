@@ -20,7 +20,6 @@ from sqlalchemy.orm import relationship
 from .database import Base
 
 
-
 class TranscriptionStatus(str, enum.Enum):  # type: ignore[misc]
     PENDING = "pending"
     PROCESSING = "processing"
@@ -42,11 +41,15 @@ class Transcription(Base):
     runtime_seconds = Column(Float, nullable=True)
     text = Column(Text, nullable=True)
     speakers = Column(JSON, nullable=True)
-    status = Column(String(32), default=TranscriptionStatus.PENDING.value, nullable=False)
+    status = Column(
+        String(32), default=TranscriptionStatus.PENDING.value, nullable=False
+    )
     error_message = Column(Text, nullable=True)
     debug_events = Column(JSON, default=list, nullable=True)
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    created_at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
     updated_at = Column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -64,7 +67,9 @@ class Transcription(Base):
     premium_perks = Column(JSON, nullable=True)
     billing_reference = Column(String(120), nullable=True)
 
-    purchases = relationship("Purchase", back_populates="transcription", cascade="all,delete-orphan")
+    purchases = relationship(
+        "Purchase", back_populates="transcription", cascade="all,delete-orphan"
+    )
 
     @property
     def is_complete(self) -> bool:
@@ -80,7 +85,7 @@ class Transcription(Base):
             f"Beam: {self.beam_size if self.beam_size is not None else 'predeterminado'}",
             f"Dispositivo: {self.device_preference or 'automático'}",
             f"Carpeta destino: {self.output_folder}",
-            ""
+            "",
         ]
         body = self.text or ""
         speaker_lines = []
@@ -126,7 +131,9 @@ class PricingTier(Base):
     max_minutes = Column(Integer, nullable=False)
     perks = Column(JSON, nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    created_at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
     updated_at = Column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -134,7 +141,9 @@ class PricingTier(Base):
         nullable=False,
     )
 
-    purchases = relationship("Purchase", back_populates="tier", cascade="all,delete-orphan")
+    purchases = relationship(
+        "Purchase", back_populates="tier", cascade="all,delete-orphan"
+    )
 
 
 class Purchase(Base):
@@ -151,7 +160,9 @@ class Purchase(Base):
     currency = Column(String(8), default="EUR", nullable=False)
     payment_url = Column(String(255), nullable=True)
     extra_metadata = Column(JSON, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    created_at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
     updated_at = Column(
         DateTime(timezone=True),
         server_default=func.now(),

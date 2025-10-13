@@ -1,4 +1,5 @@
 """Utility for interacting with S3/MinIO storage."""
+
 from __future__ import annotations
 
 import io
@@ -19,6 +20,7 @@ except ImportError:  # pragma: no cover - optional dependency
 
     class EndpointConnectionError(Exception):
         pass
+
 
 from app.config import get_settings
 
@@ -78,7 +80,9 @@ class S3StorageClient:
         resolved_base = base.resolve()
         resolved_target = target.resolve()
         if not resolved_target.is_relative_to(resolved_base):  # type: ignore[attr-defined]
-            raise ValueError(f"Ruta fuera del directorio de almacenamiento: {object_name}")
+            raise ValueError(
+                f"Ruta fuera del directorio de almacenamiento: {object_name}"
+            )
         resolved_target.parent.mkdir(parents=True, exist_ok=True)
         return resolved_target
 
@@ -99,7 +103,11 @@ class S3StorageClient:
             pass
 
     def ensure_buckets(self) -> None:
-        cache_key = (self.audio_bucket, self.transcripts_bucket, self._endpoint_url or "local")
+        cache_key = (
+            self.audio_bucket,
+            self.transcripts_bucket,
+            self._endpoint_url or "local",
+        )
         with self._bucket_lock:
             if self._bucket_state.get(cache_key):
                 if self._local_mode:
@@ -124,7 +132,9 @@ class S3StorageClient:
                 logger.info("Creating bucket", extra={"bucket": bucket})
                 try:
                     self._client.create_bucket(Bucket=bucket)
-                except EndpointConnectionError as exc:  # pragma: no cover - network failure
+                except (
+                    EndpointConnectionError
+                ) as exc:  # pragma: no cover - network failure
                     self._activate_local_mode(exc)
                     return
             except EndpointConnectionError as exc:  # pragma: no cover - network failure
@@ -195,7 +205,9 @@ class S3StorageClient:
                 return None
             return data.decode("utf-8")
         try:
-            response = self._client.get_object(Bucket=self.transcripts_bucket, Key=object_name)
+            response = self._client.get_object(
+                Bucket=self.transcripts_bucket, Key=object_name
+            )
         except ClientError as exc:
             if exc.response.get("Error", {}).get("Code") == "NoSuchKey":
                 return None
@@ -251,11 +263,13 @@ class S3StorageClient:
                 if prefix and not relative.startswith(prefix):
                     continue
                 stat = path.stat()
-                items.append({
-                    "key": relative,
-                    "size": stat.st_size,
-                    "last_modified": datetime.fromtimestamp(stat.st_mtime, tz=UTC),
-                })
+                items.append(
+                    {
+                        "key": relative,
+                        "size": stat.st_size,
+                        "last_modified": datetime.fromtimestamp(stat.st_mtime, tz=UTC),
+                    }
+                )
             return items
         if self._client is None:
             store = self._ensure_memory_bucket(self.transcripts_bucket)
@@ -263,11 +277,13 @@ class S3StorageClient:
             for key, payload in store.items():
                 if prefix and not key.startswith(prefix):
                     continue
-                items.append({
-                    "key": key,
-                    "size": len(payload),
-                    "last_modified": datetime.now(UTC),
-                })
+                items.append(
+                    {
+                        "key": key,
+                        "size": len(payload),
+                        "last_modified": datetime.now(UTC),
+                    }
+                )
             return items
         paginator = self._client.get_paginator("list_objects_v2")
         operation_parameters = {"Bucket": self.transcripts_bucket}
@@ -276,14 +292,18 @@ class S3StorageClient:
         items: List[dict] = []
         for page in paginator.paginate(**operation_parameters):
             for obj in page.get("Contents", []):
-                items.append({
-                    "key": obj["Key"],
-                    "size": obj.get("Size", 0),
-                    "last_modified": obj.get("LastModified"),
-                })
+                items.append(
+                    {
+                        "key": obj["Key"],
+                        "size": obj.get("Size", 0),
+                        "last_modified": obj.get("LastModified"),
+                    }
+                )
         return items
 
-    def create_presigned_url(self, object_name: str, expires_in: Optional[int] = None) -> Optional[str]:
+    def create_presigned_url(
+        self, object_name: str, expires_in: Optional[int] = None
+    ) -> Optional[str]:
         ttl = expires_in or self._presigned_ttl
         if self._local_mode:
             path = self._local_path(self._local_transcripts_dir, object_name)
@@ -302,5 +322,7 @@ class S3StorageClient:
                 ExpiresIn=ttl,
             )
         except ClientError:
-            logger.exception("Unable to generate presigned URL", extra={"key": object_name})
+            logger.exception(
+                "Unable to generate presigned URL", extra={"key": object_name}
+            )
             return None

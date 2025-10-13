@@ -1,4 +1,5 @@
 """SQLAlchemy engine and session management."""
+
 from __future__ import annotations
 
 import logging
@@ -28,6 +29,7 @@ except ImportError:  # pragma: no cover
 
     def get_session() -> Iterator[Any]:  # type: ignore[override]
         raise RuntimeError("SQLAlchemy must be installed to access the database layer")
+
 else:
     from app.config import get_settings
 
@@ -90,7 +92,9 @@ else:
             _sync_engine = engine
         except Exception as fallback_exc:  # pragma: no cover - catastrophic failure
             _session_error = fallback_exc
-            logger.exception("Could not initialize fallback SQLite database", exc_info=fallback_exc)
+            logger.exception(
+                "Could not initialize fallback SQLite database", exc_info=fallback_exc
+            )
 
     def _ensure_session_factory() -> None:
         """Create the SQLAlchemy session factory on demand."""
@@ -140,4 +144,3 @@ else:
     def get_session() -> Iterator[_SessionType]:  # pragma: no cover - thin wrapper
         with session_scope() as session:
             yield session
-

@@ -89,9 +89,7 @@ def check_python_runtime() -> CheckResult:
     elif "WindowsApps" in interpreter.parts:
         ok = False
         details = f"El intérprete activo es {interpreter}."
-    remedy = (
-        "Activa el entorno virtual del proyecto con Python 3.11+ y desactiva los alias de la Microsoft Store."
-    )
+    remedy = "Activa el entorno virtual del proyecto con Python 3.11+ y desactiva los alias de la Microsoft Store."
     return CheckResult(
         name="Intérprete de Python compatible",
         ok=ok,
@@ -105,9 +103,15 @@ def check_cli_tools() -> List[CheckResult]:
     for command, remedy in CLI_REQUIREMENTS.items():
         if command == "docker compose":
             has_compose = shutil.which("docker") is not None and _has_docker_compose()
-            results.append(CheckResult(name="docker compose", ok=has_compose, remedy=remedy))
+            results.append(
+                CheckResult(name="docker compose", ok=has_compose, remedy=remedy)
+            )
             continue
-        results.append(CheckResult(name=command, ok=shutil.which(command) is not None, remedy=remedy))
+        results.append(
+            CheckResult(
+                name=command, ok=shutil.which(command) is not None, remedy=remedy
+            )
+        )
     return results
 
 
@@ -167,7 +171,9 @@ def check_redis_connection(url: str) -> CheckResult:
     try:
         client = Redis.from_url(url)
         client.ping()
-        return CheckResult(name="Redis accesible", ok=True, remedy="Redis responde al ping.")
+        return CheckResult(
+            name="Redis accesible", ok=True, remedy="Redis responde al ping."
+        )
     except Exception as exc:  # pragma: no cover - depende del entorno
         return CheckResult(
             name="Redis accesible",
@@ -191,7 +197,11 @@ def check_database_connection(url: str) -> CheckResult:
     try:
         with engine.connect():
             pass
-        return CheckResult(name="Base de datos disponible", ok=True, remedy="Conexión establecida correctamente.")
+        return CheckResult(
+            name="Base de datos disponible",
+            ok=True,
+            remedy="Conexión establecida correctamente.",
+        )
     except Exception as exc:  # pragma: no cover - depende del entorno
         return CheckResult(
             name="Base de datos disponible",
@@ -201,7 +211,9 @@ def check_database_connection(url: str) -> CheckResult:
         )
 
 
-def check_s3_connection(endpoint_url: str, access_key: str, secret_key: str, region: str) -> CheckResult:
+def check_s3_connection(
+    endpoint_url: str, access_key: str, secret_key: str, region: str
+) -> CheckResult:
     try:
         import boto3  # type: ignore
     except ImportError:
@@ -220,7 +232,11 @@ def check_s3_connection(endpoint_url: str, access_key: str, secret_key: str, reg
             aws_secret_access_key=secret_key,
         )
         client.list_buckets()
-        return CheckResult(name="S3/MinIO accesible", ok=True, remedy="El endpoint respondió correctamente.")
+        return CheckResult(
+            name="S3/MinIO accesible",
+            ok=True,
+            remedy="El endpoint respondió correctamente.",
+        )
     except Exception as exc:  # pragma: no cover - depende del entorno
         return CheckResult(
             name="S3/MinIO accesible",
@@ -252,13 +268,17 @@ def install_missing_python(packages: Iterable[str]) -> None:
     for module in missing:
         requirement = PYTHON_REQUIREMENTS[module]
         print(f"  -> {requirement}")
-        subprocess.run([sys.executable, "-m", "pip", "install", requirement], check=False)
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", requirement], check=False
+        )
 
 
 def ensure_frontend_dependencies() -> None:
     npm_path = shutil.which("npm")
     if npm_path is None:
-        print("No se pudo ejecutar 'npm install' porque 'npm' no está disponible en PATH.")
+        print(
+            "No se pudo ejecutar 'npm install' porque 'npm' no está disponible en PATH."
+        )
         print("Instala Node.js o añade 'npm' al PATH y vuelve a intentarlo.")
         return
 
@@ -266,7 +286,9 @@ def ensure_frontend_dependencies() -> None:
     subprocess.run([npm_path, "install"], cwd=Path("frontend"), check=False)
 
 
-def run_checks(install_missing: bool = False, fix_frontend: bool = False, *, mode: str = "auto") -> int:
+def run_checks(
+    install_missing: bool = False, fix_frontend: bool = False, *, mode: str = "auto"
+) -> int:
     print("🔍 Comprobando entorno...")
     results: List[CheckResult] = []
     results.append(check_python_runtime())
@@ -311,7 +333,9 @@ def run_checks(install_missing: bool = False, fix_frontend: bool = False, *, mod
 
     failures = sum(1 for item in results if not item.ok)
     if failures:
-        print(f"\n❌ {failures} comprobación(es) no superadas. Consulta las sugerencias anteriores.")
+        print(
+            f"\n❌ {failures} comprobación(es) no superadas. Consulta las sugerencias anteriores."
+        )
     else:
         print("\n✅ Todo listo. Puedes ejecutar la plataforma.")
     return 0 if failures == 0 else 1

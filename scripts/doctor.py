@@ -56,7 +56,9 @@ def print_report(statuses: Iterable[ModuleStatus]) -> int:
     if ffmpeg_path:
         print(f"ffmpeg: {ffmpeg_path}")
     else:
-        print("ffmpeg: no encontrado en el PATH (instala FFmpeg o coloca el binario junto a la app)")
+        print(
+            "ffmpeg: no encontrado en el PATH (instala FFmpeg o coloca el binario junto a la app)"
+        )
 
     if not missing:
         print()
@@ -64,11 +66,15 @@ def print_report(statuses: Iterable[ModuleStatus]) -> int:
         print("  python -m scripts.init_db")
         print("  python -m uvicorn app.main:app --reload")
         print()
-        print("Inicio de sesión con Google opcional: exporta GOOGLE_CLIENT_ID y GOOGLE_REDIRECT_URI si quieres habilitarlo.")
+        print(
+            "Inicio de sesión con Google opcional: exporta GOOGLE_CLIENT_ID y GOOGLE_REDIRECT_URI si quieres habilitarlo."
+        )
         return 0
 
     print()
-    print("Faltan dependencias de Python. Activa tu entorno virtual e instala los requisitos:")
+    print(
+        "Faltan dependencias de Python. Activa tu entorno virtual e instala los requisitos:"
+    )
     print("  python -m venv .venv")
     if platform.system() == "Windows":
         print("  .\\.venv\\Scripts\\activate")

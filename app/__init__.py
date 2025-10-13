@@ -1,4 +1,5 @@
 """Application package initialization helpers."""
+
 from __future__ import annotations
 
 import importlib.util
@@ -73,6 +74,6 @@ def _patch_forward_ref_recursive_guard() -> None:
 
     ForwardRef._evaluate = _evaluate  # type: ignore[assignment]
 
+
 _ensure_stdlib_queue_module()
 _patch_forward_ref_recursive_guard()
-
