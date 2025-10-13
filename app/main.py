@@ -351,20 +351,17 @@ if FastAPI is not None:
         description=settings.api_description,
         lifespan=_lifespan,
     )
-    allow_origins: List[str] = []
+    allow_origins: List[str] = ["*"]
     frontend_origin = getattr(settings, "frontend_origin", None)
-    if frontend_origin:
-        allow_origins = ["*"] if frontend_origin == "*" else [frontend_origin]
-    elif getattr(settings, "queue_backend", "auto") == "memory":
-        allow_origins = ["*"]
-    if allow_origins:
-        app.add_middleware(
-            CORSMiddleware,
-            allow_origins=allow_origins,
-            allow_credentials=True,
-            allow_methods=["*"],
-            allow_headers=["*"],
-        )
+    if frontend_origin and frontend_origin != "*":
+        allow_origins = [frontend_origin]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=allow_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     metrics_enabled = False
     instrumentator_module = getattr(Instrumentator, "__module__", "")
     if "prometheus_fastapi_instrumentator" in instrumentator_module:
@@ -587,6 +584,7 @@ async def _stream_job(
 
 if app is not None:
 
+    spa_static_app: StaticFiles | None = None
     if StaticFiles is not None and FRONTEND_DIST.exists():
 
         class SPAStaticFiles(StaticFiles):
@@ -606,7 +604,7 @@ if app is not None:
                     return await super().get_response("index.html", scope)
                 return response
 
-        app.mount("/", SPAStaticFiles(directory=FRONTEND_DIST, html=True), name="spa")
+        spa_static_app = SPAStaticFiles(directory=FRONTEND_DIST, html=True)
 
     else:
 
@@ -762,7 +760,8 @@ if app is not None:
         job_id: str, user: AuthenticatedUser = Depends(get_current_user)
     ) -> EventSourceResponse:
 
-        async def event_generator() -> AsyncGenerator[Dict[str, str], None]:
+        async def event_generator() -> AsyncGenerator[Dict[str, Any], None]:
+            yield {"retry": 5000}
             try:
                 async for event in _stream_job(job_id, expected_user_id=user.id):
                     yield event
@@ -775,7 +774,6 @@ if app is not None:
         return EventSourceResponse(
             event_generator(),
             ping=10.0,
-            retry=5000,
             headers={
                 "Cache-Control": "no-cache",
                 "X-Accel-Buffering": "no",
@@ -1059,6 +1057,9 @@ if app is not None:
             storage_ready=storage_ready,
             features=features,
         )
+
+    if spa_static_app is not None:
+        app.mount("/", spa_static_app, name="spa")
 
 def create_app() -> FastAPIApp:
     if app is None:

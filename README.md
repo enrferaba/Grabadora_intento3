@@ -20,6 +20,25 @@
 5. Al finalizar, `GET /transcripts` y `GET /transcripts/{id}` muestran detalle; `/download` y `/export` permiten exportar.
 6. Descargas deben emitirse como archivos (`Content-Disposition`) y reflejar los perfiles configurados.
 
+### Endpoints principales
+
+| Ruta | Método | Descripción | Parámetros |
+|------|--------|-------------|------------|
+| `/auth/signup` | POST | Registra un usuario y crea el perfil "Default". | JSON: `email`, `password`. |
+| `/auth/token` | POST | Devuelve `access_token` (OAuth2 password flow). | Form URL-encoded: `username`, `password`, `grant_type=password`. |
+| `/transcribe` | POST | Sube un audio y encola la transcripción. | `multipart/form-data`: `file` (obligatorio), `language?`, `profile?`, `title?`, `tags?`, `diarization?`, `word_timestamps?`. |
+| `/transcribe/{job_id}` | GET (SSE) | Stream en tiempo real de `delta`, `snapshot`, `heartbeat` y `completed`. | Header `Authorization: Bearer <token>`; path `job_id`. |
+| `/jobs/{job_id}` | GET | Consulta estado del job y metadatos (progreso, URL firmada). | Header `Authorization`; path `job_id`. |
+| `/transcripts` | GET | Lista de transcripciones del usuario autenticado. | Query opcionales: `search`, `status`. |
+| `/transcripts/{id}` | GET | Detalle completo con segmentos, metadatos y URL. | Path `id`; header `Authorization`. |
+| `/transcripts/{id}` | PATCH | Actualiza título, notas, etiquetas o perfil de calidad. | JSON parcial con `title`, `notes`, `tags`, `quality_profile`. |
+| `/transcripts/{id}` | DELETE | Elimina transcripción y blobs asociados. | Path `id`; header `Authorization`. |
+| `/transcripts/{id}/download` | GET | Descarga en TXT/MD/SRT con `Content-Disposition`. | Query `format` (`txt`, `md`, `srt`). |
+| `/transcripts/{id}/export` | POST | Encola exportación a Notion/Trello/Webhook. | JSON: `destination`, `format`, `note?`. |
+| `/profiles` | GET | Devuelve perfiles de calidad disponibles y personalizados. | Header `Authorization`. |
+| `/config` | GET | Config general de la SPA (SSE, colas, storage). | — |
+| `/healthz` | GET | Healthcheck rápido para despliegues. | — |
+
 ## 2. Requisitos y compatibilidad
 
 | Dependencia | Versión mínima recomendada | Motivo |
