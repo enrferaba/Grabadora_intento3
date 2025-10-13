@@ -12,11 +12,23 @@ class DummyJob:
     def refresh(self) -> None:
         self._refreshes += 1
         if self._refreshes == 1:
-            self.meta.update({"progress": 1, "last_token": json.dumps({"text": "Hello", "t0": 0.0, "t1": 1.0})})
+            self.meta.update(
+                {
+                    "progress": 1,
+                    "last_token": json.dumps({"text": "Hello", "t0": 0.0, "t1": 1.0}),
+                }
+            )
         elif self._refreshes == 2:
-            self.meta.update({"progress": 2, "last_token": json.dumps({"text": " ", "t0": 1.0, "t1": 2.0})})
+            self.meta.update(
+                {
+                    "progress": 2,
+                    "last_token": json.dumps({"text": " ", "t0": 1.0, "t1": 2.0}),
+                }
+            )
         elif self._refreshes == 3:
-            self.meta.update({"status": "completed", "transcript_key": "k", "language": "en"})
+            self.meta.update(
+                {"status": "completed", "transcript_key": "k", "language": "en"}
+            )
 
     def get_status(self, refresh: bool = False) -> str:
         if self.meta.get("status") == "completed":
@@ -61,7 +73,9 @@ def test_stream_job_emits_delta_events(monkeypatch):
 
     events = asyncio.run(run_stream())
 
-    delta_tokens = [json.loads(item["data"]) for item in events if item.get("event") == "delta"]
+    delta_tokens = [
+        json.loads(item["data"]) for item in events if item.get("event") == "delta"
+    ]
     assert delta_tokens == [
         {"text": "Hello", "t0": 0.0, "t1": 1.0},
         {"text": " ", "t0": 1.0, "t1": 2.0},
