@@ -99,7 +99,7 @@
 
 ### 4.1 Arranque rápido con Docker Compose
 1. Variables de entorno: el repositorio incluye un `.env` mínimo que apunta a `.env.example`, por lo que `docker compose up --build` funciona incluso en un clon limpio. Para personalizar credenciales crea un `.env.local` (`cp .env.example .env.local`), ajústalo y ejecuta `python ejecutar.py` o edita `.env` para que `GRABADORA_ENV_FILE=.env.local`. Si dejas `GRABADORA_JWT_SECRET_KEY` con el placeholder, la primera ejecución generará y guardará un secreto aleatorio en `.env.local`.
-2. Preparar entorno local (opcional pero recomendado): `python3.11 -m venv .venv && source .venv/bin/activate` (Linux/macOS) o `py -3.11 -m venv .venv` (Windows), luego `python doctor.py --mode stack` para validar Python ≥3.11, Node ≥20, puertos libres y acceso a MinIO.
+2. Preparar entorno local (opcional pero recomendado): `python3.11 -m venv .venv && source .venv/bin/activate` (Linux/macOS) o `python -m venv .venv` (Windows). Después ejecuta `python doctor.py --mode stack` para validar Python ≥3.11, Node ≥20, puertos libres y acceso a MinIO. Si el alias `python` abre la Microsoft Store, desactiva los alias de ejecución y usa el intérprete instalado desde python.org.
 3. Si el frontend cambió, instala dependencias: `cd frontend && npm install && cd ..`.
 4. Levantar servicios principales: `docker compose up --build`. Usa `docker compose --profile queue up --build` si quieres incluir el worker de RQ.
    > ⚠️ Usa `--build` con dos guiones. El atajo `-build` provoca el error `unknown shorthand flag: 'b'` en Docker Compose v2.
