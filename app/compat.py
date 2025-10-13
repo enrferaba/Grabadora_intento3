@@ -1,4 +1,5 @@
 """Compatibility patches loaded early in the application lifecycle."""
+
 from __future__ import annotations
 
 import inspect
@@ -36,7 +37,9 @@ def _patch_forward_ref() -> None:
     except ValueError:
         param_index = -1
 
-    positional_slot = param_index - 1 if accepts_positional and param_index > 0 else None
+    positional_slot = (
+        param_index - 1 if accepts_positional and param_index > 0 else None
+    )
 
     def _patched(self, *args, **kwargs):  # type: ignore[override]
         if positional_slot is not None and len(args) > positional_slot:
@@ -53,4 +56,3 @@ def _patch_forward_ref() -> None:
 
 
 _patch_forward_ref()
-

@@ -1,4 +1,5 @@
 """Atajo para lanzar la API tras verificar dependencias."""
+
 from __future__ import annotations
 
 import argparse
@@ -53,8 +54,12 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Ejecuta 'npm install' en frontend/ si faltan dependencias de la SPA.",
     )
-    parser.add_argument("--host", default="0.0.0.0", help="Host de escucha para uvicorn.")
-    parser.add_argument("--port", type=int, default=8000, help="Puerto de escucha para uvicorn.")
+    parser.add_argument(
+        "--host", default="0.0.0.0", help="Host de escucha para uvicorn."
+    )
+    parser.add_argument(
+        "--port", type=int, default=8000, help="Puerto de escucha para uvicorn."
+    )
     parser.add_argument(
         "--reload",
         action=argparse.BooleanOptionalAction,
