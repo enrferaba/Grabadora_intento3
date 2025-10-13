@@ -43,11 +43,11 @@
 
 | Dependencia | Versión mínima recomendada | Motivo |
 |-------------|----------------------------|--------|
-| Python | 3.12.0 | Evita bugs de `datetime.UTC` ausente en Python 3.9 (observado en reloader) y alinea con dependencias modernas. |
+| Python | 3.11.0 (ideal 3.12) | Evita bugs de `datetime.UTC` ausente en Python 3.9 y alinea con dependencias modernas. |
 | typing-extensions | ≥ 4.14.1 | Pydantic ≥ 2.12 falla con 4.11.0; fija compatibilidad. |
 | python-multipart | ≥ 0.0.20 | Requerido para aceptar formularios multipart en FastAPI (`POST /transcribe`). |
 | sse-starlette | ≥ 3.0.0 | Necesario para `EventSourceResponse` estable. |
-| Node.js | ≥ 18 LTS | Compilación de la SPA con Vite. |
+| Node.js | ≥ 20 LTS | Compilación de la SPA con Vite y compatibilidad con la API global `fetch`. |
 | FFmpeg | Binario disponible en PATH | Normaliza audio previo a transcripción (`app/utils/storage.py`). |
 | Docker + Compose | Opcional | Levantar stack completo (API, worker, Redis, PostgreSQL, MinIO, Prometheus). |
 
@@ -86,28 +86,34 @@
 
 7. **Dependencias coherentes**
    - Congelar versiones en `pyproject.toml`/`package.json` tras validar.
-   - Documentar en `doctor.py` la exigencia de Python 3.12, Node/npm en PATH y fallback cuando falte Redis/MinIO.
+   - Documentar en `doctor.py` la exigencia de Python 3.11+, Node 20 LTS, puertos libres y fallback cuando falte Redis/MinIO.
 
 8. **Persistencia**
    - Confirmar migraciones (`alembic upgrade head`).
    - Verificar que la biblioteca persiste tras reiniciar (usar SQLite en local, PostgreSQL en stack).
 
+9. **Calidad automatizada**
+   - Ejecutar `ruff check .`, `black --check .` y `pytest` antes de subir cambios.
+
 ## 4. Puesta en marcha
 
 ### 4.1 Arranque rápido con Docker Compose
-1. Copiar variables: `cp .env.example .env` y completar credenciales S3/JWT.
-2. Verificar dependencias locales: `python3.12 -m venv .venv && source .venv/bin/activate` (Linux/macOS) o `py -3.12 -m venv .venv` (Windows PowerShell), luego `python doctor.py`.
-3. Compilar frontend si hiciste cambios: `cd frontend && npm install && npm run build && cd ..`.
-4. Levantar stack completo: `docker compose up --build`.
-5. URLs esperadas: `http://localhost:8000/` (SPA), `http://localhost:8000/docs`, `http://localhost:8000/healthz`, `http://localhost:8000/metrics` (si habilitado).
+1. Copiar variables: `cp .env.example .env` y rellenar credenciales **antes** de arrancar (el backend falla si detecta secretos de ejemplo).
+2. Preparar entorno local (opcional pero recomendado): `python3.11 -m venv .venv && source .venv/bin/activate` (Linux/macOS) o `py -3.11 -m venv .venv` (Windows), luego `python doctor.py --mode stack` para validar Python ≥3.11, Node ≥20, puertos libres y acceso a MinIO.
+3. Si el frontend cambió, instala dependencias: `cd frontend && npm install && cd ..`.
+4. Levantar servicios principales: `docker compose up --build`. Usa `docker compose --profile queue up --build` si quieres incluir el worker de RQ.
+5. URLs esperadas: `http://localhost:5173/` (SPA en Vite), `http://localhost:8000/docs`, `http://localhost:8000/healthz`, `http://localhost:9001/` (MinIO console).
 
 ### 4.2 Ejecución local sin Docker
-1. Crear entorno virtual con Python 3.12 y activar.
-2. Instalar dependencias: `pip install -r requirements.txt` o `poetry install`.
-3. Comprobar entorno: `python doctor.py --install-missing --fix-frontend`.
-4. Inicializar base de datos: `alembic upgrade head` (usará SQLite si no hay PostgreSQL).
-5. Arrancar API+SPA: `python ejecutar.py --host 0.0.0.0 --port 8000`.
-6. (Opcional) Worker: `rq worker transcription --url $GRABADORA_REDIS_URL` o activar fallback en memoria.
+1. Crear entorno virtual con Python 3.11+: `python3.11 -m venv .venv && source .venv/bin/activate`.
+2. Instalar dependencias backend: `pip install -r requirements.txt` (o `poetry install`).
+   * El archivo principal incluye la pila de ML (`faster-whisper`, `whisperx`, `torch`).
+   * Para un arranque ligero (sin modelos), puedes usar `pip install -r requirements/base.txt`.
+3. Validar entorno y puertos libres: `python doctor.py --mode local --install-missing --fix-frontend`.
+4. Ejecutar migraciones si usas PostgreSQL: `alembic upgrade head`. En modo local sin DB externa se usará SQLite automáticamente.
+5. Arrancar el backend: `uvicorn app.main:app --reload --host 0.0.0.0 --port 8000`.
+6. En otra terminal, servir la SPA: `cd frontend && npm install && npm run dev -- --host 0.0.0.0 --port 5173`.
+7. (Opcional) Worker dedicado: `rq worker transcription --url $GRABADORA_REDIS_URL` o deja que el backend use la cola en memoria.
 
 ## 5. Verificación manual recomendada
 

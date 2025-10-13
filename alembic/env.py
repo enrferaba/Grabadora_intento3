@@ -1,13 +1,22 @@
 """Alembic environment configuration."""
 from __future__ import annotations
 
+import os
+import sys
 from logging.config import fileConfig
+from pathlib import Path
 
-from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from app.config import get_settings
-from models.user import Base
+from alembic import context
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+project_root_str = os.fspath(PROJECT_ROOT)
+if project_root_str not in sys.path:
+    sys.path.insert(0, project_root_str)
+
+from app.config import get_settings  # noqa: E402
+from models.user import Base  # noqa: E402
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -28,7 +37,12 @@ def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode."""
 
     url = config.get_main_option("sqlalchemy.url")
-    context.configure(url=url, target_metadata=target_metadata, literal_binds=True, dialect_opts={"paramstyle": "named"})
+    context.configure(
+        url=url,
+        target_metadata=target_metadata,
+        literal_binds=True,
+        dialect_opts={"paramstyle": "named"},
+    )
 
     with context.begin_transaction():
         context.run_migrations()
