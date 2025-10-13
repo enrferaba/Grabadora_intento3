@@ -106,15 +106,22 @@ async def _asgi_request(
     scope_headers = [(b"host", b"testserver")]
     if headers:
         scope_headers.extend((name.lower().encode(), value.encode()) for name, value in headers)
+    if "?" in path:
+        path_only, query_string = path.split("?", 1)
+        raw_query = query_string.encode()
+    else:
+        path_only = path
+        raw_query = b""
+
     scope = {
         "type": "http",
         "http_version": "1.1",
         "asgi": {"version": "3.0"},
         "method": method.upper(),
         "scheme": "http",
-        "path": path,
-        "raw_path": path.encode(),
-        "query_string": b"",
+        "path": path_only,
+        "raw_path": path_only.encode(),
+        "query_string": raw_query,
         "headers": scope_headers,
         "client": ("testclient", 50000),
         "server": ("testserver", 80),
@@ -208,10 +215,8 @@ def _parse_sse_events(payload: str) -> List[Dict[str, str]]:
     return events
 
 
-async def test_upload_and_stream_flow(api_context):
+async def _enqueue_completed_transcription(app) -> Tuple[str, int]:
     from taskqueue.fallback import drain_completed_jobs
-
-    app, _ = api_context
 
     audio_bytes = _make_wav_bytes()
 
@@ -243,6 +248,19 @@ async def test_upload_and_stream_flow(api_context):
 
     drain_completed_jobs(timeout=5.0)
 
+    status, _, job_chunks = await _asgi_request(app, "GET", f"/jobs/{job_id}")
+    assert status == 200
+    job_payload = json.loads(b"".join(job_chunks).decode())
+    transcript_id = job_payload.get("transcript_id")
+    assert transcript_id
+    return job_id, int(transcript_id)
+
+
+async def test_upload_and_stream_flow(api_context):
+    app, _ = api_context
+
+    job_id, _ = await _enqueue_completed_transcription(app)
+
     status, response_headers, sse_chunks = await _asgi_request(
         app,
         "GET",
@@ -273,3 +291,55 @@ async def test_cors_configuration(api_context):
     assert options.get("allow_origins") == ["*"]
     assert options.get("allow_methods") == ["*"]
     assert options.get("allow_headers") == ["*"]
+    assert options.get("allow_credentials") is False
+
+
+async def test_download_transcript(api_context):
+    app, _ = api_context
+
+    _, transcript_id = await _enqueue_completed_transcription(app)
+
+    from app.database import session_scope
+    from models.user import Transcript
+    from storage.s3 import S3StorageClient
+
+    storage = S3StorageClient()
+    storage.ensure_buckets()
+    object_name = f"tests/transcript-{transcript_id}.txt"
+    storage.upload_transcript("Transcripción de prueba", object_name)
+
+    with session_scope() as session:
+        transcript = (
+            session.query(Transcript)
+            .filter(Transcript.id == transcript_id)
+            .one()
+        )
+        transcript.transcript_key = object_name
+        session.add(transcript)
+        session.commit()
+    with session_scope() as session:
+        refreshed = (
+            session.query(Transcript)
+            .filter(Transcript.id == transcript_id)
+            .one()
+        )
+        assert refreshed.transcript_key == object_name
+        assert refreshed.user_id == app.state.test_user.id  # type: ignore[attr-defined]
+
+    storage_check = S3StorageClient()
+    storage_check.ensure_buckets()
+    assert storage_check.download_transcript(object_name) is not None
+
+    status, headers, chunks = await _asgi_request(
+        app,
+        "GET",
+        f"/transcripts/{transcript_id}/download?format=md",
+    )
+    body_text = b"".join(chunks).decode()
+    assert status == 200, body_text
+    content_type_header = next((value for key, value in headers if key.lower() == "content-type"), "")
+    assert "text/plain" in content_type_header
+    disposition = next((value for key, value in headers if key.lower() == "content-disposition"), "")
+    assert "attachment" in disposition.lower()
+    body = b"".join(chunks).decode()
+    assert "#" in body
