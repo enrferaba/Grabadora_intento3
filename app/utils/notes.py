@@ -44,16 +44,16 @@ def generate_premium_notes(text: str) -> str:
     ]
     action_items = action_items[:3]
 
-    question_items = [sentence for sentence in sentences if sentence.strip().endswith("?")][:3]
+    question_items = [
+        sentence for sentence in sentences if sentence.strip().endswith("?")
+    ][:3]
 
     words = [
         word.lower()
         for word in re.findall(r"[\wáéíóúüñÁÉÍÓÚÜÑ]{4,}", text)
         if len(word) > 4
     ]
-    common_terms = ", ".join(
-        term for term, _ in Counter(words).most_common(6)
-    )
+    common_terms = ", ".join(term for term, _ in Counter(words).most_common(6))
 
     bullet_points = [
         f"• {textwrap.shorten(sentence, width=140, placeholder='…')}"
