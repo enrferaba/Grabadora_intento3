@@ -5,8 +5,8 @@ Este documento explica cómo verificar el entorno, arrancar la plataforma y reso
 ## 1. Preparar el entorno
 
 ### 1.1 Requisitos previos
-- Python 3.12 instalado y accesible como `python`/`python3` (Linux/macOS) o `py -3.12` (Windows).
-- Node.js >= 18 y `npm` disponibles en PATH.
+- Python 3.11 o superior instalado y accesible como `python`/`python3` (Linux/macOS) o `py -3.11` (Windows).
+- Node.js >= 20 LTS y `npm` disponibles en PATH.
 - FFmpeg instalado (`ffmpeg -version`).
 - (Opcional) Docker + Docker Compose v2 para levantar la pila completa.
 
@@ -14,15 +14,17 @@ Este documento explica cómo verificar el entorno, arrancar la plataforma y reso
 
 | Sistema | Comando |
 |---------|---------|
-| Linux/macOS | `python3.12 -m venv .venv && source .venv/bin/activate` |
-| Windows PowerShell | `py -3.12 -m venv .venv; .\.venv\Scripts\Activate.ps1` |
+| Linux/macOS | `python3.11 -m venv .venv && source .venv/bin/activate` |
+| Windows PowerShell | `py -3.11 -m venv .venv; .\.venv\Scripts\Activate.ps1` |
 
 > Si PowerShell bloquea la activación, ejecuta `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` con permisos de administrador.
 
 ### 1.3 Instalar dependencias
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements.txt  # stack completa con modelos
+# Si solo quieres probar la API sin dependencias pesadas:
+# pip install -r requirements/base.txt
 # o con Poetry
 poetry install
 ```
@@ -35,45 +37,48 @@ npm install
 cd ..
 ```
 
+> Si dejas `GRABADORA_JWT_SECRET_KEY` con el placeholder en `.env` o `.env.local`, `python ejecutar.py` generará un secreto aleatorio y lo guardará automáticamente para los siguientes arranques.
+
 ## 2. Uso de `doctor.py`
 
-`python doctor.py` realiza comprobaciones previas al arranque.
+`python doctor.py` realiza comprobaciones previas al arranque del stack.
 
 Parámetros útiles:
 - `--install-missing`: intenta instalar paquetes de Python ausentes dentro del entorno activo.
-- `--fix-frontend`: ejecuta `npm install` y verifica que exista `frontend/dist/`.
+- `--fix-frontend`: ejecuta `npm install` en `frontend/` si faltan dependencias.
+- `--mode local|stack`: habilita las comprobaciones de Redis/MinIO/DB cuando usas Docker Compose.
 
 Salida esperada (resumida):
 
 ```
 ✅ Intérprete de Python compatible
+✅ Node.js >= 20 LTS
 ✅ FFmpeg disponible
 ✅ Dependencias de frontend instaladas
 ✅ Build de frontend generado
+✅ nvidia-smi disponible
+✅ Puertos disponibles
 ```
 
 Si aparece ❌, sigue la sugerencia mostrada. Casos comunes:
 - **Python 3.9 detectado**: revisa `where python`/`Get-Command python` y ajusta la ruta al `.venv`.
 - **npm no encontrado (Windows)**: reinstala Node.js y vuelve a abrir PowerShell.
-- **Redis/DB inaccesibles**: el doctor lo marca informativo; puedes continuar si usarás los fallbacks en memoria/SQLite.
+- **Redis/DB/S3 inaccesibles**: revisa que Docker Compose esté corriendo o cambia a `--mode local` para usar los fallbacks.
 
 ## 3. Ejecutar la API y la SPA
 
 ### 3.1 Modo local (sin Docker)
 
-```bash
-python ejecutar.py --host 0.0.0.0 --port 8000
-```
+1. Activa el entorno virtual (`source .venv/bin/activate`).
+2. Arranca la API en modo recarga: `uvicorn app.main:app --reload --host 0.0.0.0 --port 8000`.
+3. En otra terminal, levanta la SPA: `cd frontend && npm run dev -- --host 0.0.0.0 --port 5173`.
+4. Opcional: usa `python ejecutar.py` si prefieres un comando único que ejecuta `doctor.py` y uvicorn con las banderas adecuadas.
 
-Bandera útiles:
-- `--mode local|stack`: fuerza el modo de entorno (afecta uso de Redis/S3 vs. fallbacks).
-- `--skip-checks`: omite `doctor.py` cuando ya validaste el entorno.
-
-La salida debe mostrar URLs como:
+URLs locales:
 ```
-SPA disponible en http://127.0.0.1:8000/
-Docs API en     http://127.0.0.1:8000/docs
-Healthcheck en  http://127.0.0.1:8000/healthz
+SPA           http://localhost:5173/
+Docs API      http://localhost:8000/docs
+Healthcheck   http://localhost:8000/healthz
 ```
 
 > Si `/docs` carga pero `POST /transcribe` devuelve 405, revisa que la solicitud sea `multipart/form-data` y que `python-multipart` esté instalado.
@@ -92,13 +97,17 @@ Si no tienes Redis, activa el backend en memoria estableciendo `GRABADORA_QUEUE_
 
 ```bash
 docker compose up --build
+# Para añadir el worker en segundo plano:
+docker compose --profile queue up --build
 ```
 
-Incluye API, worker, Redis, PostgreSQL, MinIO, Prometheus y Grafana. Comprueba los healthchecks con `docker compose ps`.
+> Nota: El repositorio trae un `.env` básico que apunta a `.env.example`, así que `docker compose up --build` funciona sin pasos previos. Para credenciales propias crea `.env.local` (git lo ignora), ajústalo y cambia `GRABADORA_ENV_FILE=.env.local` en `.env` o exporta `GRABADORA_ENV_FILE=.env.local` antes de levantar los contenedores.
+
+El perfil por defecto levanta API (8000), frontend en Vite (5173), Redis, PostgreSQL y MinIO. Comprueba los healthchecks con `docker compose ps` y espera a ver `healthy` antes de probar.
 
 ## 4. Pruebas rápidas
 
-1. Abre `http://localhost:8000/` y verifica que la SPA cargue.
+1. Abre `http://localhost:5173/` y verifica que la SPA cargue (en producción puede servirse desde la API).
 2. Desde `/docs`, crea un usuario (`POST /auth/signup`), inicia sesión (`POST /auth/token`) y copia el token.
 3. Configura el token en Swagger (botón “Authorize” → `Bearer <token>`).
 4. Lanza `POST /transcribe` subiendo un WAV/MP3 pequeño. Debe responder `job_id`.
@@ -115,5 +124,9 @@ Incluye API, worker, Redis, PostgreSQL, MinIO, Prometheus y Grafana. Comprueba l
 | `Falling back to local disk storage...` | MinIO/S3 no disponible. | Documenta el modo local en README y confirma permisos de escritura. |
 | Pantalla completa sin salida visible | UI sin botón de salida. | Añadir botón “Salir de pantalla completa” y atajos en la SPA. |
 | `python doctor.py` usa Python 3.9 de Microsoft Store | Alias global invade el PATH. | Deshabilita App Installer (`winget settings`) y usa `.venv\Scripts\python.exe`. |
+
+## 6. Auditoría rápida del repositorio
+
+Ejecuta `python scripts/revisa_repo.py` desde la raíz para generar `RepoAudit.md` con un checklist de `.env`, Docker Compose y migraciones. Repasa las advertencias antes de abrir un PR o desplegar.
 
 Mantén este archivo actualizado cuando cambien parámetros o banderas de `ejecutar.py`.

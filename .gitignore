@@ -4,6 +4,7 @@ __pycache__/
 *.pyo
 *.pyd
 .env
+!/.env
 .venv/
 venv/
 .env.local
@@ -28,6 +29,7 @@ storage/*
 !storage/s3.py
 transcripts/
 grabadora.db
+RepoAudit.md
 
 # Docker
 *.pid

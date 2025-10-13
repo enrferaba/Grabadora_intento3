@@ -13,6 +13,14 @@ from tempfile import SpooledTemporaryFile
 import pytest
 from pydub import AudioSegment
 
+try:
+    from fastapi import BackgroundTasks, UploadFile
+except ImportError:  # pragma: no cover - fastapi missing
+    fastapi = pytest.importorskip("fastapi")
+    from fastapi import BackgroundTasks, UploadFile  # type: ignore  # noqa: F401
+else:
+    import fastapi  # type: ignore  # noqa: F401
+
 
 def _ensure_forward_ref_default() -> None:
     forward_ref = getattr(typing, "ForwardRef", None)
@@ -59,9 +67,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-fastapi = pytest.importorskip("fastapi")
-from fastapi import BackgroundTasks, UploadFile
-
 
 def _make_upload(
     filename: str,
@@ -107,8 +112,7 @@ def test_env(tmp_path_factory: pytest.TempPathFactory):
     os.environ["ENABLE_DUMMY_TRANSCRIBER"] = "true"
     os.environ["WHISPER_DEVICE"] = "cpu"
     # Refresca ajustes ya cargados por otros tests (pydantic Settings es singleton)
-    from app import config
-    from app import whisper_service
+    from app import config, whisper_service
 
     config.settings.enable_dummy_transcriber = True
     config.settings.whisper_device = "cpu"
