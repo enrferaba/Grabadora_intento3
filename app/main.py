@@ -273,7 +273,7 @@ QUALITY_PROFILES = {
 }
 
 SPA_ROUTE_HINTS = ["/", "/transcribir", "/grabar", "/biblioteca", "/cuenta"]
-API_ROUTE_PREFIXES = (
+API_ROUTE_PREFIXES: tuple[str, ...] = (
     "docs",
     "openapi.json",
     "redoc",
@@ -283,7 +283,6 @@ API_ROUTE_PREFIXES = (
     "transcripts",
     "users",
     "healthz",
-    "metrics",
     "profiles",
     "config",
 )
@@ -353,6 +352,7 @@ if FastAPI is not None:
         description=settings.api_description,
         lifespan=_lifespan,
     )
+    setattr(app.state, "spa_protected_prefixes", API_ROUTE_PREFIXES)
     cors_kwargs: Dict[str, Any] | None = None
     origin_regex = getattr(settings, "frontend_origin_regex", None)
     if origin_regex:
@@ -396,6 +396,8 @@ if FastAPI is not None:
                 extra={"error": repr(exc)},
             )
     setattr(app.state, "metrics_enabled", metrics_enabled)
+    if metrics_enabled:
+        setattr(app.state, "spa_protected_prefixes", API_ROUTE_PREFIXES + ("metrics",))
 
 API_ERRORS = Counter("api_errors_total", "Total API errors", namespace=settings.prometheus_namespace)
 QUEUE_LENGTH = Gauge("queue_length", "Number of queued transcription jobs", namespace=settings.prometheus_namespace)
@@ -1214,7 +1216,12 @@ if app is not None:
             return HTMLResponse(candidate.read_text(encoding="utf-8"))
         normalized = full_path.strip("/")
         if normalized:
-            for prefix in API_ROUTE_PREFIXES:
+            protected_prefixes = API_ROUTE_PREFIXES
+            if app is not None:
+                protected_prefixes = getattr(
+                    app.state, "spa_protected_prefixes", API_ROUTE_PREFIXES
+                )
+            for prefix in protected_prefixes:
                 if normalized == prefix or normalized.startswith(f"{prefix}/"):
                     raise HTTPException(status_code=404, detail="Not Found")
         return _spa_index()
