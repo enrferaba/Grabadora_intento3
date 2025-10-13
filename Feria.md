@@ -1,99 +1,41 @@
-# Guía de feria: puesta en marcha rápida
+# Informe de diagnóstico y corrección
 
-Esta guía resume los pasos de validación y arranque que usamos durante las demos de feria. Está pensada para un entorno local con SQLite y almacenamiento en disco, pero también señala qué cambiar para pasar a la pila completa (Postgres + Redis + MinIO).
+Este documento resume el estado del proyecto tras la revisión técnica, las correcciones aplicadas y los pasos que garantizan una instalación limpia tanto en entornos locales como en despliegues con Docker.
 
-## 1. Preparar el entorno
+## Qué estaba roto
 
-1. Crea un entorno virtual de Python 3.11+ y activa el intérprete.
-2. Instala dependencias base y de ML cuando quieras transcribir de verdad:
-   ```bash
-   pip install -r requirements/base.txt
-   pip install -r requirements/ml.txt
-   ```
-3. Instala las dependencias del frontend:
-   ```bash
-   cd frontend
-   npm install
-   cd -
-   ```
-4. Copia `.env.example` a `.env` (UTF-8 sin BOM) y revisa al menos `GRABADORA_JWT_SECRET_KEY` y los buckets de S3. Para demos sin MinIO no tienes que tocar los valores: el backend caerá automáticamente a almacenamiento local.
+- Las dependencias declaradas en `requirements/base.txt` y `pyproject.toml` incluían librerías no utilizadas (pandas, numpy, langdetect, python-jose, passlib, httpx), lo que generaba instalaciones innecesariamente pesadas y discrepancias con el código real.
+- El script `doctor.py` validaba la presencia de módulos de ML obligatorios incluso en modo local, provocando falsos negativos cuando solo se instalaban los requisitos básicos.
+- La configuración de CORS reconstruía manualmente la pila de middlewares de FastAPI, impidiendo que Prometheus pudiera instrumentar la aplicación durante el arranque (`Cannot add middleware after an application has started`).
+- La imagen de Docker intentaba instalar WhisperX dentro de la capa base, lo que disparaba la compilación de PyAV y fallaba en entornos sin toolchain completo.
+- `doctor.py` evaluaba el modo de ejecución antes de normalizarlo, por lo que en algunos escenarios lanzaba excepciones y marcaba como críticas dependencias opcionales.
+- La documentación mezclaba comandos con el alias `py`, instrucciones obsoletas y no ofrecía un diagnóstico claro de fallback para Redis, MinIO o el worker.
 
-## 2. Inicializar SQLite sin Alembic
+## Qué se corrigió
 
-1. Asegúrate de que el proyecto está en el `PYTHONPATH` (equivalente a `export PYTHONPATH=$(pwd)` en Linux/macOS o `setx PYTHONPATH %CD%` en PowerShell).
-2. Ejecuta el bloque de inicialización para crear la base de datos y las tablas:
-   ```bash
-   python - <<'PY'
-   from app.database import Base, get_engine
-   engine = get_engine()
-   Base.metadata.create_all(bind=engine)
-   print("SQLite: tablas creadas OK")
-   PY
-   ```
-3. Si prefieres usar Alembic, ajusta `GRABADORA_DATABASE_URL` (o `alembic.ini`) al URL de SQLite y lanza `alembic upgrade head` con el `PYTHONPATH` configurado.
+- Se sincronizaron `pyproject.toml` y `requirements/base.txt` con las dependencias realmente usadas, eliminando librerías superfluas y añadiendo `structlog`. Las dependencias de ML se movieron a un grupo opcional (`requirements/ml.txt`) y WhisperX quedó documentado como instalación manual con wheel binario de PyAV.
+- `doctor.py` ahora exige Python 3.11, normaliza el modo antes de comprobar dependencias, diferencia entre requisitos obligatorios y opcionales (advertencias para ML en modo local) e instala solo los paquetes necesarios cuando se usa `--install-missing`.
+- La configuración CORS dejó de mutar `app.user_middleware`, por lo que Prometheus puede instrumentar la aplicación antes de que FastAPI construya la pila. Con ello desaparece el error de middleware en caliente.
+- El Dockerfile exporta `PIP_PREFER_BINARY`, evita instalar la pila ML en la imagen base y usa `pip --prefer-binary` para Poetry y Cython, impidiendo que PyAV se compile en builds estándar.
+- `ejecutar.md` y `README.md` se actualizaron para usar siempre el comando `python`, documentar el fallback de Redis/S3, explicar la instalación opcional de WhisperX y detallar el flujo de diagnóstico, incluida la recomendación de exportar `PIP_PREFER_BINARY=1` antes de instalar la pila de ML para evitar compilaciones de PyAV.
+- `Feria.md` se reescribió con este informe y referencias claras a los pasos de instalación.
 
-## 3. Arrancar la plataforma
+## Pasos necesarios para una instalación limpia
 
-1. Usa el asistente para modo local (cola en memoria + SQLite):
-   ```bash
-   python ejecutar.py --mode local
-   ```
-   El script ejecutará el `doctor`, configurará las variables de entorno y asegurará que SQLite tenga las tablas listas.
-2. En otra terminal, levanta el frontend:
-   ```bash
-   cd frontend
-   npm run dev
-   ```
-3. Abre `http://localhost:8000/docs` para probar la API o `http://localhost:5173` para la SPA.
+1. Clona el repositorio y sitúate en la raíz del proyecto.
+2. Crea un entorno virtual con Python 3.11 (`python -m venv .venv`) y actívalo.
+3. Instala las dependencias base mediante `pip install -r requirements/base.txt`. Solo instala `requirements/ml.txt` si necesitas transcripción real con GPU/CPU avanzada.
+4. Copia `.env.example` a `.env.local`, revisa el secreto JWT y ajusta `GRABADORA_DATABASE_URL` si vas a usar PostgreSQL. Define `GRABADORA_ENV_FILE=.env.local` si quieres que ejecutar.py cargue ese archivo automáticamente.
+5. Ejecuta `python doctor.py --mode local --install-missing --fix-frontend` para validar Python, Node, FFmpeg, puertos libres y la presencia de dependencias opcionales.
+6. Arranca el backend con `python ejecutar.py` y levanta el frontend con `npm install` seguido de `npm run dev` dentro de `frontend`.
+7. Si necesitas un worker real, inicia Redis (por ejemplo con `docker compose up redis`) y lanza `rq worker transcription --url redis://localhost:6379/0`. Sin Redis se utiliza la cola en memoria.
+8. Para la pila completa utiliza `docker compose up --build` (añade `--profile queue` si quieres un worker dedicado). Prometheus y Grafana quedan disponibles en los puertos 9090 y 3000 respectivamente.
+9. Comprueba la demo rápida ejecutando `python scripts/seed_dev.py`, autenticándote en `/docs`, subiendo un audio y verificando que la transcripción se almacena correctamente aunque MinIO no esté disponible (fallback a disco local).
 
-## 4. Registrar un usuario y autenticar desde Swagger
+## Referencias
 
-1. `POST /auth/signup` con cuerpo JSON:
-   ```json
-   {"email": "admin@local.com", "password": "admin123"}
-   ```
-2. `POST /auth/token` con `grant_type=password`, `username=admin@local.com` y `password=admin123` (form-data o x-www-form-urlencoded).
-3. Pulsa el candado "Authorize", pega `Bearer <access_token>` y confirma. A partir de ahí el resto de endpoints autenticados funcionarán.
+- `ejecutar.md`: pasos detallados sin bloques de código para Windows y Linux/WSL.
+- `README.md`: visión general del proyecto, despliegue con Docker y recomendaciones de pruebas manuales.
+- `doctor.py`: asistente de validación de entorno con banderas `--mode`, `--install-missing` y `--fix-frontend`.
 
-El frontend utiliza el header `Authorization: Bearer <token>` en todas las llamadas cuando guardas el token en la sesión.
-
-> Truco rápido: `python scripts/seed_dev.py` crea automáticamente el usuario `admin@local.com / admin123` y evita repetir estos pasos tras cada reinicio de la base de datos.
-
-## 5. Alternativa stack completa
-
-Cuando quieras usar Postgres/Redis/MinIO (por ejemplo con Docker Compose):
-
-1. Ajusta `.env` con las credenciales reales o las del `docker-compose.yml`.
-2. Lanza `docker compose up -d` para tener `api`, `frontend`, `minio`, `redis` y `db`.
-3. Ejecuta `alembic upgrade head` contra Postgres (`GRABADORA_DATABASE_URL=postgresql+psycopg2://...`).
-4. Arranca un worker: `python -m taskqueue.worker`.
-
-## 6. Solución de problemas frecuentes
-
-- **Error `Could not import module "main"`**: asegura que arrancas con `uvicorn app.main:app` o usa `python ejecutar.py`.
-- **CORS desde la SPA**: define `GRABADORA_FRONTEND_ORIGIN=http://localhost:5173` en `.env` (el modo local lo hace por ti).
-- **MinIO no responde**: el cliente conmutará a disco local y mostrará una advertencia en los logs.
-- **SQLite vacío**: vuelve a ejecutar el bloque de inicialización del paso 2 o borra `grabadora.db` para recrearlo.
-
-## 7. Comandos rápidos (copiar/pegar)
-
-```bash
-# Crear .env base
-cat <<'ENV' > .env
-GRABADORA_JWT_SECRET_KEY=pon-aqui-un-secreto-fuerte
-GRABADORA_FRONTEND_ORIGIN=http://localhost:5173
-ENV
-
-# Inicializar SQLite
-PYTHONPATH=$(pwd) python - <<'PY'
-from app.database import Base, get_engine
-engine = get_engine()
-Base.metadata.create_all(bind=engine)
-print("SQLite: tablas creadas OK")
-PY
-
-# Arrancar todo en modo local
-python ejecutar.py --mode local
-```
-
-¡Lista para transcribir y demo en minutos! Si algo falla, ejecuta `python doctor.py` para revisar dependencias y puertos.
+Actualiza este informe cada vez que se modifique la cadena de dependencias o el procedimiento de despliegue.

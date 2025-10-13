@@ -257,21 +257,10 @@ def _configure_cors(app_obj: Any, settings: Any) -> None:
                         "allow_methods": ["*"],
                         "allow_headers": ["*"],
                     }
-    previous_signature = (
-        getattr(app_obj.state, "frontend_origin", None),
-        getattr(app_obj.state, "frontend_origin_regex", None),
-    )
-    current_signature = (settings.frontend_origin, settings.frontend_origin_regex)
-    if previous_signature == current_signature:
-        return
-    app_obj.user_middleware = [
-        mw for mw in app_obj.user_middleware if mw.cls is not CORSMiddleware
-    ]
     if cors_kwargs:
-        app_obj.user_middleware.append(Middleware(CORSMiddleware, **cors_kwargs))
+        app_obj.add_middleware(CORSMiddleware, **cors_kwargs)
     app_obj.state.frontend_origin = settings.frontend_origin
     app_obj.state.frontend_origin_regex = settings.frontend_origin_regex
-    app_obj.middleware_stack = app_obj.build_middleware_stack()
 
 
 def _obtain_queue() -> tuple[object, bool]:

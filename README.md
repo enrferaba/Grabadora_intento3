@@ -99,7 +99,7 @@
 
 ### 4.1 Arranque rápido con Docker Compose
 1. Variables de entorno: el repositorio incluye un `.env` mínimo que apunta a `.env.example`, por lo que `docker compose up --build` funciona incluso en un clon limpio. Para personalizar credenciales crea un `.env.local` (`cp .env.example .env.local`), ajústalo y ejecuta `python ejecutar.py` o edita `.env` para que `GRABADORA_ENV_FILE=.env.local`. Si dejas `GRABADORA_JWT_SECRET_KEY` con el placeholder, la primera ejecución generará y guardará un secreto aleatorio en `.env.local`.
-2. Preparar entorno local (opcional pero recomendado): `python3.11 -m venv .venv && source .venv/bin/activate` (Linux/macOS) o `py -3.11 -m venv .venv` (Windows), luego `python doctor.py --mode stack` para validar Python ≥3.11, Node ≥20, puertos libres y acceso a MinIO.
+2. Preparar entorno local (opcional pero recomendado): `python3.11 -m venv .venv && source .venv/bin/activate` (Linux/macOS) o `python -m venv .venv` (Windows). Después ejecuta `python doctor.py --mode stack` para validar Python ≥3.11, Node ≥20, puertos libres y acceso a MinIO. Si el alias `python` abre la Microsoft Store, desactiva los alias de ejecución y usa el intérprete instalado desde python.org.
 3. Si el frontend cambió, instala dependencias: `cd frontend && npm install && cd ..`.
 4. Levantar servicios principales: `docker compose up --build`. Usa `docker compose --profile queue up --build` si quieres incluir el worker de RQ.
    > ⚠️ Usa `--build` con dos guiones. El atajo `-build` provoca el error `unknown shorthand flag: 'b'` en Docker Compose v2.
@@ -108,10 +108,11 @@
 ### 4.2 Ejecución local sin Docker
 1. Crear entorno virtual con Python 3.11+: `python3.11 -m venv .venv && source .venv/bin/activate`.
 2. Instalar dependencias backend: `pip install -r requirements/base.txt`.
-   * Añade `pip install -r requirements/ml.txt` cuando necesites la pila de transcripción completa (CUDA/CPU potente).
+   * Antes de ejecutar `pip install -r requirements/ml.txt` exporta `PIP_PREFER_BINARY=1` (o en PowerShell usa `$env:PIP_PREFER_BINARY = '1'`) para que pip priorice wheels y evites compilaciones de PyAV. Ese archivo instala `faster-whisper`, `ctranslate2`, `torch` y `torchaudio`.
+   * Para habilitar diarización con WhisperX instala manualmente los binarios de PyAV antes de `pip install whisperx==3.1.2` (por ejemplo `pip install --prefer-binary av==11.0.0 whisperx==3.1.2`).
    * En Windows, si encuentras errores compilando PyAV al instalar la pila ML, usa Docker/WSL o instala las dependencias nativas de FFmpeg antes de repetir.
    * `poetry install` sigue disponible si prefieres gestionar el entorno con Poetry.
-3. Valida entorno y puertos libres: `python doctor.py --mode local --install-missing --fix-frontend`.
+3. Valida entorno y puertos libres: `python doctor.py --mode local --install-missing --fix-frontend`. El asistente marcará como advertencias las dependencias opcionales de ML cuando ejecutes en modo local.
 4. Ejecuta migraciones si usas PostgreSQL: `alembic upgrade head`. En modo local sin DB externa se usará SQLite automáticamente.
 5. Arranca el backend: `uvicorn app.main:app --reload --host 0.0.0.0 --port 8000`.
 6. En otra terminal, sirve la SPA: `cd frontend && npm install && npm run dev -- --host 0.0.0.0 --port 5173`.

@@ -2,7 +2,10 @@ FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    POETRY_VERSION=2.2.1
+    POETRY_VERSION=2.2.1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_PREFER_BINARY=1
 
 WORKDIR /app
 
@@ -25,7 +28,7 @@ RUN apt-get update \
 
 COPY pyproject.toml /app/
 
-RUN pip install --no-cache-dir "Cython<3" "poetry==${POETRY_VERSION}" \
+RUN pip install --no-cache-dir --prefer-binary "Cython<3" "poetry==${POETRY_VERSION}" \
     && poetry config virtualenvs.create false \
     && poetry install --without dev --no-root
 

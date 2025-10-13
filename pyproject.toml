@@ -11,10 +11,7 @@ starlette = "0.48.0"
 uvicorn = {extras = ["standard"], version = "0.30.1"}
 redis = "^5.0.4"
 rq = "^1.16.2"
-faster-whisper = "^0.10.0"
 boto3 = "^1.34.0"
-python-jose = "^3.3.0"
-passlib = "^1.7.4"
 psycopg2-binary = "^2.9.9"
 SQLAlchemy = "^2.0.29"
 python-multipart = "0.0.20"
@@ -24,6 +21,16 @@ pydantic = "2.12.0"
 sse-starlette = "3.0.0"
 python-dotenv = "^1.0.1"
 typing-extensions = "^4.14.1"
+structlog = "^24.2.0"
+
+[tool.poetry.group.ml]
+optional = true
+
+[tool.poetry.group.ml.dependencies]
+faster-whisper = "^0.10.0"
+ctranslate2 = "^4.5.0"
+torch = "^2.5.1"
+torchaudio = "^2.5.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.2.0"

@@ -17,9 +17,9 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List
+from typing import Iterable, List, Mapping
 
-MIN_PYTHON = (3, 10)
+MIN_PYTHON = (3, 11)
 MIN_NODE = (20, 0, 0)
 DEFAULT_PORTS = {
     8000: "API FastAPI",
@@ -36,9 +36,15 @@ class CheckResult:
     ok: bool
     remedy: str
     details: str | None = None
+    optional: bool = False
 
     def render(self) -> str:
-        prefix = "✅" if self.ok else "❌"
+        if self.ok:
+            prefix = "✅"
+        elif self.optional:
+            prefix = "⚠️"
+        else:
+            prefix = "❌"
         line = f"{prefix} {self.name}"
         if not self.ok:
             line += f"\n   Sugerencia: {self.remedy}"
@@ -57,12 +63,18 @@ PYTHON_REQUIREMENTS = {
     "redis": "redis",
     "rq": "rq",
     "boto3": "boto3",
-    "faster_whisper": "faster-whisper",
     "sse_starlette": "sse-starlette",
     "prometheus_client": "prometheus-client",
     "structlog": "structlog",
-    "jose": "python-jose[cryptography]",
     "multipart": "python-multipart",
+}
+
+PYTHON_OPTIONAL_REQUIREMENTS = {
+    "faster_whisper": "pip install -r requirements/ml.txt",
+    "ctranslate2": "pip install -r requirements/ml.txt",
+    "torch": "pip install -r requirements/ml.txt",
+    "torchaudio": "pip install -r requirements/ml.txt",
+    "whisperx": "pip install --prefer-binary av==11.0.0 whisperx==3.1.2",
 }
 
 
@@ -83,15 +95,21 @@ def _parse_version(raw: str) -> tuple[int, int, int]:
     return int(major), int(minor), int(patch)
 
 
-def check_python_packages() -> List[CheckResult]:
+def check_python_packages(
+    requirements: Mapping[str, str], *, optional: bool = False
+) -> List[CheckResult]:
     results: List[CheckResult] = []
-    for module, requirement in PYTHON_REQUIREMENTS.items():
+    for module, requirement in requirements.items():
+        label = f"Módulo de Python '{module}'"
+        if optional:
+            label += " (opcional)"
         spec = importlib.util.find_spec(module)
         results.append(
             CheckResult(
-                name=f"Módulo de Python '{module}'",
+                name=label,
                 ok=spec is not None,
                 remedy=f"pip install {requirement}",
+                optional=optional,
             )
         )
     return results
@@ -432,14 +450,16 @@ def _has_docker_compose() -> bool:
         return False
 
 
-def install_missing_python(packages: Iterable[str]) -> None:
-    missing = [pkg for pkg in packages if importlib.util.find_spec(pkg) is None]
+def install_missing_python(requirements: Mapping[str, str]) -> None:
+    missing = [
+        module for module in requirements if importlib.util.find_spec(module) is None
+    ]
     if not missing:
         print("Todas las dependencias de Python ya están instaladas.")
         return
     print("Instalando dependencias de Python que faltan...")
     for module in missing:
-        requirement = PYTHON_REQUIREMENTS[module]
+        requirement = requirements[module]
         print(f"  -> {requirement}")
         subprocess.run(
             [sys.executable, "-m", "pip", "install", requirement], check=False
@@ -466,16 +486,7 @@ def run_checks(
     results: List[CheckResult] = []
     results.append(check_python_runtime())
     results.append(check_node_runtime())
-    python_results = check_python_packages()
-    results.extend(python_results)
-    results.extend(check_cli_tools())
-    frontend_result = check_frontend_ready()
-    results.append(frontend_result)
-    results.append(check_ffmpeg_available())
-    results.append(check_gpu_status())
-    results.append(check_frontend_build())
 
-    settings = _load_settings()
     normalized_mode = mode
     if normalized_mode not in {"local", "stack"}:
         requested = os.getenv("GRABADORA_QUEUE_BACKEND", "auto").lower()
@@ -485,6 +496,24 @@ def run_checks(
             normalized_mode = "local"
         else:
             normalized_mode = "local"
+
+    python_results = check_python_packages(PYTHON_REQUIREMENTS)
+    results.extend(python_results)
+    ml_is_optional = normalized_mode != "stack"
+    results.extend(
+        check_python_packages(
+            PYTHON_OPTIONAL_REQUIREMENTS,
+            optional=ml_is_optional,
+        )
+    )
+    results.extend(check_cli_tools())
+    frontend_result = check_frontend_ready()
+    results.append(frontend_result)
+    results.append(check_ffmpeg_available())
+    results.append(check_gpu_status())
+    results.append(check_frontend_build())
+
+    settings = _load_settings()
 
     if normalized_mode == "stack" and settings is not None:
         results.append(check_redis_connection(settings.redis_url))
@@ -507,11 +536,11 @@ def run_checks(
         print(item.render())
 
     if install_missing:
-        install_missing_python(PYTHON_REQUIREMENTS.keys())
+        install_missing_python(PYTHON_REQUIREMENTS)
     if fix_frontend and not frontend_result.ok:
         ensure_frontend_dependencies()
 
-    failures = sum(1 for item in results if not item.ok)
+    failures = sum(1 for item in results if not item.ok and not item.optional)
     if failures:
         print(
             f"\n❌ {failures} comprobación(es) no superadas. Consulta las sugerencias anteriores."
