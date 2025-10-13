@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { qualityProfiles, streamTranscription, uploadTranscription } from "@/lib/api";
+import { streamTranscription, uploadTranscription } from "@/lib/api";
 import { AuthPanel } from "@/components/AuthPanel";
 import { SseViewer } from "@/components/SseViewer";
+import { useQualityProfiles } from "@/lib/hooks";
 
 interface Props {
   onLibraryRefresh?: () => void;
@@ -23,12 +24,19 @@ export function GrabarPage({ onLibraryRefresh }: Props) {
   const [jobId, setJobId] = useState<string | null>(null);
   const [title, setTitle] = useState("Grabación rápida");
   const stopStreamRef = useRef<() => void>();
+  const { profiles } = useQualityProfiles();
 
   useEffect(() => () => {
     stopStreamRef.current?.();
     cancelAnimationFrame(animationRef.current ?? 0);
     audioContextRef.current?.close();
   }, []);
+
+  useEffect(() => {
+    if (profiles.length > 0 && !profiles.find((item) => item.id === profile)) {
+      setProfile(profiles[0].id);
+    }
+  }, [profiles, profile]);
 
   function updateMeter() {
     const analyser = analyserRef.current;
@@ -145,9 +153,9 @@ export function GrabarPage({ onLibraryRefresh }: Props) {
             <label style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
               Perfil de calidad
               <select value={profile} onChange={(event) => setProfile(event.target.value)}>
-                {qualityProfiles().map((item) => (
+                {profiles.map((item) => (
                   <option key={item.id} value={item.id}>
-                    {item.title}
+                    {item.label}
                   </option>
                 ))}
               </select>

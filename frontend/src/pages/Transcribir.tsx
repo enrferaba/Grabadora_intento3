@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { qualityProfiles, streamTranscription, uploadTranscription } from "@/lib/api";
+import { streamTranscription, uploadTranscription } from "@/lib/api";
 import { AuthPanel } from "@/components/AuthPanel";
 import { SseViewer } from "@/components/SseViewer";
 import { Uploader } from "@/components/Uploader";
+import { useAppConfig, useQualityProfiles } from "@/lib/hooks";
 
 interface Props {
   onLibraryRefresh?: () => void;
@@ -25,8 +26,16 @@ export function TranscribirPage({ onLibraryRefresh, requireAuth = true }: Props)
   const [diarization, setDiarization] = useState(false);
   const [wordTimestamps, setWordTimestamps] = useState(true);
   const stopStreamRef = useRef<() => void>();
+  const { profiles } = useQualityProfiles();
+  const { config } = useAppConfig();
 
   useEffect(() => () => stopStreamRef.current?.(), []);
+
+  useEffect(() => {
+    if (profiles.length > 0 && !profiles.find((item) => item.id === profile)) {
+      setProfile(profiles[0].id);
+    }
+  }, [profiles, profile]);
 
   async function startStream(job: { job_id: string }) {
     setJobId(job.job_id);
@@ -147,7 +156,7 @@ export function TranscribirPage({ onLibraryRefresh, requireAuth = true }: Props)
                 </span>
               </div>
               <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                {qualityProfiles().map((item) => (
+                {profiles.map((item) => (
                   <button
                     key={item.id}
                     type="button"
@@ -162,13 +171,18 @@ export function TranscribirPage({ onLibraryRefresh, requireAuth = true }: Props)
                       transition: "all 0.2s ease",
                     }}
                   >
-                    <strong style={{ display: "block", fontSize: "0.85rem" }}>{item.title}</strong>
+                    <strong style={{ display: "block", fontSize: "0.85rem" }}>{item.label}</strong>
                     <span style={{ fontSize: "0.7rem", color: "#94a3b8" }}>{item.description}</span>
                   </button>
                 ))}
               </div>
             </header>
             <Uploader onSelect={handleSubmit} busy={status === "uploading" || status === "streaming"} />
+            {config?.max_upload_size_mb && (
+              <p style={{ margin: 0, color: "#64748b", fontSize: "0.85rem" }}>
+                Tamaño máximo permitido: {config.max_upload_size_mb} MB.
+              </p>
+            )}
             {(status === "completed" || status === "error") && (
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem" }}>
                 <div style={{ color: status === "completed" ? "#22c55e" : "#fca5a5" }}>

@@ -40,6 +40,7 @@ export interface TranscriptSummary {
   error_message?: string | null;
   debug_events?: Array<Record<string, unknown>>;
   tags: string[];
+  notes?: string | null;
 }
 
 export interface TranscriptDetail extends TranscriptSummary {
@@ -54,6 +55,119 @@ export interface TranscriptDetail extends TranscriptSummary {
   original_filename?: string | null;
   error_message?: string | null;
   profile_id?: number | null;
+}
+
+export interface QualityProfile {
+  id: string;
+  label: string;
+  description?: string | null;
+  latency_hint_ms?: number | null;
+  cost_factor?: number | null;
+}
+
+export interface AccountProfile {
+  id: number;
+  name: string;
+  description?: string | null;
+  created_at: string;
+}
+
+export interface ProfilesResponse {
+  quality_profiles: QualityProfile[];
+  account_profiles: AccountProfile[];
+}
+
+export interface AppConfig {
+  app_name: string;
+  max_upload_size_mb: number;
+  queue_backend: "auto" | "redis" | "memory";
+  sse_ping_interval: number;
+  sse_retry_delay_ms: number;
+  metrics_enabled: boolean;
+  spa_routes: string[];
+  storage_ready: boolean;
+  features: Record<string, unknown>;
+}
+
+const DEFAULT_QUALITY_PROFILES: QualityProfile[] = [
+  {
+    id: "fast",
+    label: "Rápido (int8)",
+    description: "Máxima velocidad, ideal para notas rápidas",
+    latency_hint_ms: 60000,
+    cost_factor: 0.25,
+  },
+  {
+    id: "balanced",
+    label: "Equilibrado (float16)",
+    description: "Buen balance entre precisión y coste",
+    latency_hint_ms: 120000,
+    cost_factor: 1,
+  },
+  {
+    id: "precise",
+    label: "Preciso (float32)",
+    description: "Máxima fidelidad para grabaciones críticas",
+    latency_hint_ms: 180000,
+    cost_factor: 1.75,
+  },
+];
+
+let cachedProfiles: ProfilesResponse | null = null;
+let cachedConfig: AppConfig | null = null;
+let profilesPromise: Promise<ProfilesResponse> | null = null;
+let configPromise: Promise<AppConfig> | null = null;
+
+export function getCachedQualityProfiles(): QualityProfile[] {
+  return cachedProfiles?.quality_profiles ?? DEFAULT_QUALITY_PROFILES;
+}
+
+export function getCachedAccountProfiles(): AccountProfile[] {
+  return cachedProfiles?.account_profiles ?? [];
+}
+
+export function getCachedConfig(): AppConfig | null {
+  return cachedConfig;
+}
+
+export function hasProfileCache(): boolean {
+  return cachedProfiles !== null;
+}
+
+export function hasConfigCache(): boolean {
+  return cachedConfig !== null;
+}
+
+export async function fetchProfiles(force = false): Promise<ProfilesResponse> {
+  if (!force && cachedProfiles) {
+    return cachedProfiles;
+  }
+  if (!force && profilesPromise) {
+    return profilesPromise;
+  }
+  profilesPromise = apiFetch<ProfilesResponse>("/profiles");
+  try {
+    cachedProfiles = await profilesPromise;
+    return cachedProfiles;
+  } finally {
+    profilesPromise = null;
+  }
+}
+
+export async function fetchAppConfig(force = false): Promise<AppConfig> {
+  if (!force && cachedConfig) {
+    return cachedConfig;
+  }
+  if (!force && configPromise) {
+    return configPromise;
+  }
+  configPromise = apiFetch<AppConfig>("/config");
+  try {
+    cachedConfig = await configPromise;
+    return cachedConfig;
+  } finally {
+    configPromise = null;
+  }
 }
 
 export interface StreamHandlers {
@@ -122,14 +236,6 @@ export function logout(): void {
   clearAuthState();
 }
 
-export function qualityProfiles(): Array<{ id: string; title: string; description: string }> {
-  return [
-    { id: "fast", title: "Rápido (int8)", description: "Ideal para notas rápidas y demo" },
-    { id: "balanced", title: "Equilibrado (float16)", description: "La mejor relación coste/precisión" },
-    { id: "precise", title: "Preciso (float32)", description: "Máxima fidelidad para entrevistas" },
-  ];
-}
-
 export async function uploadTranscription(formData: FormData, options: UploadOptions = {}): Promise<{
   job_id: string;
   status: string;
@@ -154,7 +260,13 @@ export async function uploadTranscription(formData: FormData, options: UploadOpt
       if (xhr.status >= 200 && xhr.status < 300) {
         resolve(xhr.response);
       } else {
-        const detail = typeof xhr.response === "string" ? xhr.response : JSON.stringify(xhr.response);
+        let detail = typeof xhr.response === "string" ? xhr.response : JSON.stringify(xhr.response);
+        if (xhr.status === 413) {
+          const limit = cachedConfig?.max_upload_size_mb ?? getCachedConfig()?.max_upload_size_mb;
+          detail = limit
+            ? `El archivo supera el límite permitido de ${limit} MB.`
+            : "El archivo es demasiado grande para procesarlo.";
+        }
         reject(new Error(detail || `Upload failed with status ${xhr.status}`));
       }
     };
@@ -387,6 +499,25 @@ export async function exportTranscript(
     method: "POST",
     body: JSON.stringify({ destination, format, note }),
   });
+}
+
+export async function updateTranscript(
+  id: number,
+  payload: Partial<Pick<TranscriptDetail, "title" | "tags" | "notes" | "quality_profile">>,
+): Promise<TranscriptDetail> {
+  const body: Record<string, unknown> = {};
+  if (payload.title !== undefined) body.title = payload.title;
+  if (payload.notes !== undefined) body.notes = payload.notes;
+  if (payload.quality_profile !== undefined) body.quality_profile = payload.quality_profile;
+  if (payload.tags !== undefined) body.tags = payload.tags;
+  return apiFetch(`/transcripts/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function deleteTranscript(id: number): Promise<void> {
+  await apiFetch(`/transcripts/${id}`, { method: "DELETE" });
 }
 
 export { getAuthState, setAuthState, clearAuthState } from "./auth";

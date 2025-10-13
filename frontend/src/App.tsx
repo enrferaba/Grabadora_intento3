@@ -4,7 +4,8 @@ import { BibliotecaPage } from "@/pages/Biblioteca";
 import { GrabarPage } from "@/pages/Grabar";
 import { TranscribirPage } from "@/pages/Transcribir";
 import { CuentaPage } from "@/pages/Cuenta";
-import { getAuthState, logout, qualityProfiles } from "@/lib/api";
+import { getAuthState, logout } from "@/lib/api";
+import { useAppConfig, useQualityProfiles } from "@/lib/hooks";
 
 function Navigation() {
   const location = useLocation();
@@ -225,8 +226,15 @@ function Navigation() {
 export default function App() {
   const navigate = useNavigate();
   const [refreshToken, setRefreshToken] = useState(0);
+  const { profiles } = useQualityProfiles();
+  const { config } = useAppConfig();
   const handleRefresh = () => setRefreshToken((value) => value + 1);
   const goTo = (path: string) => navigate(path);
+
+  const storageMode = ((config?.features?.storage as { mode?: string } | undefined)?.mode ?? "automático").toString();
+  const storageReady = config?.storage_ready ?? false;
+  const queueBackend = config?.queue_backend ?? "auto";
+  const uploadLimit = config?.max_upload_size_mb ? `${config.max_upload_size_mb} MB` : "–";
 
   const metricStyle: CSSProperties = {
     flex: "1 1 150px",
@@ -279,16 +287,21 @@ export default function App() {
             </div>
             <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap" }}>
               <div style={metricStyle}>
-                <span style={metricValueStyle}>0&nbsp;min</span>
-                <span style={metricLabelStyle}>Minutos restantes</span>
+                <span style={metricValueStyle}>{uploadLimit}</span>
+                <span style={metricLabelStyle}>Límite de subida</span>
               </div>
               <div style={metricStyle}>
-                <span style={metricValueStyle}>0</span>
-                <span style={metricLabelStyle}>En cola</span>
+                <span style={metricValueStyle}>{queueBackend.toUpperCase()}</span>
+                <span style={metricLabelStyle}>Cola seleccionada</span>
               </div>
               <div style={metricStyle}>
-                <span style={metricValueStyle}>–</span>
-                <span style={metricLabelStyle}>Perfil activo</span>
+                <span style={metricValueStyle}>{storageMode === "remote" ? "S3" : "Local"}</span>
+                <span style={{ ...metricLabelStyle, display: "flex", flexDirection: "column" }}>
+                  <span>Destino de ficheros</span>
+                  <span style={{ fontSize: "0.8rem", color: storageReady ? "#34d399" : "#fbbf24" }}>
+                    {storageReady ? "Listo para escribir" : "Revisión recomendada"}
+                  </span>
+                </span>
               </div>
             </div>
             <div
@@ -298,7 +311,7 @@ export default function App() {
                 gap: "1rem",
               }}
             >
-              {qualityProfiles().map((item) => (
+              {profiles.map((item) => (
                 <div
                   key={item.id}
                   style={{
@@ -308,7 +321,7 @@ export default function App() {
                     border: "1px solid rgba(148,163,184,0.2)",
                   }}
                 >
-                  <h4 style={{ margin: "0 0 0.35rem 0" }}>{item.title}</h4>
+                  <h4 style={{ margin: "0 0 0.35rem 0" }}>{item.label}</h4>
                   <p style={{ margin: 0, color: "#94a3b8", fontSize: "0.9rem" }}>{item.description}</p>
                 </div>
               ))}
