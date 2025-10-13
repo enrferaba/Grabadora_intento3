@@ -6,13 +6,15 @@ Elige el bloque que corresponda a tu sistema operativo. Todos los comandos asume
 
 1. **Preparar Python y dependencias**
    ```powershell
-   # Usa "python" si la orden "py" no está disponible en tu equipo
-   py -3.11 -m venv .venv
+   python --version  # debería mostrar 3.11.x
+   python -m venv .venv
    .\.venv\Scripts\Activate.ps1
-   pip install -r requirements/base.txt
+   python -m pip install -r requirements/base.txt
    # Para transcribir con modelos grandes usa también (requiere CUDA o CPU potente):
-   # pip install -r requirements/ml.txt
+   # python -m pip install -r requirements/ml.txt
    ```
+
+   > Si `python` abre la Microsoft Store o ves un alias del sistema, desactiva los alias en *Configuración → Aplicaciones → Alias de ejecución de la aplicación* y vuelve a intentarlo.
 
    > Si quieres la pila completa (Redis, MinIO, PostgreSQL) usa Docker más abajo; no necesitas instalar `ml.txt` para probar la API básica.
 
@@ -37,19 +39,21 @@ Elige el bloque que corresponda a tu sistema operativo. Todos los comandos asume
    ```
 
 5. **Cola de trabajos (opcional)**
-   Solo si usas Redis (por ejemplo, tras ejecutar `docker compose up redis`): 
+   Solo si usas Redis (por ejemplo, tras ejecutar `docker compose up redis` o iniciarlo desde WSL):
    ```powershell
    $env:GRABADORA_REDIS_URL="redis://localhost:6379/0"
    rq worker transcription --url $env:GRABADORA_REDIS_URL
    ```
    Si no defines Redis, la aplicación usa una cola en memoria y no necesitas worker.
 
+   > Si aparece `Error 10061 connecting to localhost:6379`, significa que Redis no está en marcha. Arráncalo primero o elimina la variable `GRABADORA_REDIS_URL`.
+
 6. **Docker en Windows**
-   Para evitar compilar dependencias como PyAV en Windows, es recomendable usar Docker (requiere WSL2):
+   Para evitar compilar dependencias como PyAV en Windows, es recomendable usar Docker (requiere WSL2 con soporte para containers de Linux):
    ```powershell
    docker compose up --build
    ```
-   El compose levanta API, frontend, Redis, PostgreSQL y MinIO. El acceso sigue siendo `http://localhost:8000` (API) y `http://localhost:5173` (frontend).
+   El compose levanta API, frontend, Redis, PostgreSQL y MinIO. Si aparece un error compilando PyAV durante el build, ejecuta el comando desde una consola WSL2/Linux con Docker Desktop o reutiliza la imagen ya publicada (`docker compose pull`). El acceso sigue siendo `http://localhost:8000` (API) y `http://localhost:5173` (frontend).
 
 ## Linux / WSL / macOS (bash/zsh)
 
@@ -103,9 +107,10 @@ Elige el bloque que corresponda a tu sistema operativo. Todos los comandos asume
 
 ## Problemas habituales
 
+- **`py` no se reconoce**: usa `python -m venv .venv`. Si `python` abre la Microsoft Store, desactiva el alias y utiliza el intérprete real (por ejemplo el que se instala desde python.org).
+- **`python -3.11` da "Unknown option"**: la bandera `-3.11` no existe; usa `python -m venv .venv`.
 - **`rq worker` dice que falta `--url`**: en PowerShell usa `$env:VARIABLE`, no `$VARIABLE`.
 - **Error compilando PyAV en Windows**: usa Docker o WSL; la imagen oficial ya incluye FFmpeg y las cabeceras necesarias.
 - **`docker compose up` pide `.env`**: el repositorio incluye un `.env` mínimo que apunta a `.env.example`. Crea `.env.local` para credenciales reales y exporta `GRABADORA_ENV_FILE=.env.local` si quieres que Compose lo cargue.
-- **`py` no se reconoce**: instala Python desde la Microsoft Store o usa `python -m venv .venv`.
 
 Mantén este archivo a mano y actualízalo cuando cambie el proceso de arranque.
