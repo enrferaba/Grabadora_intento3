@@ -19,8 +19,8 @@ from fastapi import (
     APIRouter,
     BackgroundTasks,
     Depends,
-    Form,
     File,
+    Form,
     HTTPException,
     Query,
     Response,
@@ -28,8 +28,13 @@ from fastapi import (
     status,
 )
 from fastapi.responses import FileResponse
+from pydub import AudioSegment
+from pydub.exceptions import CouldntDecodeError
+from pydub.silence import detect_nonsilent
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
+
+from storage.s3 import S3StorageClient
 
 from ..config import settings
 from ..database import get_session
@@ -58,21 +63,17 @@ from ..utils.storage import (
     save_upload_file,
     write_atomic_text,
 )
-from storage.s3 import S3StorageClient
 from ..whisper_service import (
     BaseTranscriber,
     TranscriptionResult,
     get_model_preparation_status,
     get_transcriber,
-    is_cuda_runtime_available,
     is_cuda_dependency_error,
+    is_cuda_runtime_available,
     request_model_preparation,
-    summarize_cuda_dependency_error,
     serialize_segments,
+    summarize_cuda_dependency_error,
 )
-from pydub import AudioSegment
-from pydub.exceptions import CouldntDecodeError
-from pydub.silence import detect_nonsilent
 
 ALLOWED_MEDIA_EXTENSIONS = {
     ".aac",

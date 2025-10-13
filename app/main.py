@@ -15,6 +15,7 @@ try:  # pragma: no cover - optional dependency
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
     from fastapi.staticfiles import StaticFiles
+    from starlette.middleware import Middleware
     from starlette.requests import ClientDisconnect
 except ImportError:  # pragma: no cover
     FastAPI = None  # type: ignore
@@ -72,6 +73,10 @@ except ImportError:  # pragma: no cover
     class CORSMiddleware:  # type: ignore
         def __init__(self, *args, **kwargs) -> None:
             raise RuntimeError("FastAPI is required for CORS middleware")
+
+    class Middleware:  # type: ignore
+        def __init__(self, *args, **kwargs) -> None:
+            raise RuntimeError("FastAPI is required for middleware")
 
     class ClientDisconnect(Exception):  # type: ignore
         pass
@@ -145,8 +150,10 @@ from app.config import get_settings
 from app.database import session_scope
 from app.schemas import (
     AppConfigResponse,
+    ProfileRead,
     ProfilesResponse,
     QualityProfileSchema,
+    TokenResponse,
     TranscriptDetail,
     TranscriptExportRequest,
     TranscriptResponse,
@@ -154,9 +161,8 @@ from app.schemas import (
     TranscriptUpdateRequest,
     UserCreate,
     UserRead,
-    ProfileRead,
-    TokenResponse,
 )
+
 try:  # pragma: no cover - optional dependency
     from models.user import Profile, Transcript, User
 except ImportError:  # pragma: no cover
@@ -191,19 +197,68 @@ except ImportError:  # pragma: no cover
             self.email = ""
             self.profiles: list = []
 
+from storage.s3 import S3StorageClient
 from taskqueue import tasks
 from taskqueue.fallback import InMemoryQueue, InMemoryRedis
-from storage.s3 import S3StorageClient
-
-settings = get_settings()
 
 _fallback_queue: InMemoryQueue | None = None
+
+
+def _settings():
+    return get_settings()
+
+
+def _configure_cors(app_obj: Any, settings: Any) -> None:
+    cors_kwargs: Dict[str, Any] | None = None
+    origin_regex = getattr(settings, "frontend_origin_regex", None)
+    if origin_regex:
+        cors_kwargs = {
+            "allow_origin_regex": origin_regex,
+            "allow_credentials": True,
+            "allow_methods": ["*"],
+            "allow_headers": ["*"],
+        }
+    else:
+        frontend_origin = getattr(settings, "frontend_origin", None)
+        if frontend_origin:
+            origins = [item.strip() for item in frontend_origin.split(",") if item.strip()]
+            if origins:
+                if origins == ["*"]:
+                    cors_kwargs = {
+                        "allow_origins": ["*"],
+                        "allow_credentials": False,
+                        "allow_methods": ["*"],
+                        "allow_headers": ["*"],
+                    }
+                else:
+                    cors_kwargs = {
+                        "allow_origins": origins,
+                        "allow_credentials": True,
+                        "allow_methods": ["*"],
+                        "allow_headers": ["*"],
+                    }
+    previous_signature = (
+        getattr(app_obj.state, "frontend_origin", None),
+        getattr(app_obj.state, "frontend_origin_regex", None),
+    )
+    current_signature = (settings.frontend_origin, settings.frontend_origin_regex)
+    if previous_signature == current_signature:
+        return
+    app_obj.user_middleware = [
+        mw for mw in app_obj.user_middleware if mw.cls is not CORSMiddleware
+    ]
+    if cors_kwargs:
+        app_obj.user_middleware.append(Middleware(CORSMiddleware, **cors_kwargs))
+    app_obj.state.frontend_origin = settings.frontend_origin
+    app_obj.state.frontend_origin_regex = settings.frontend_origin_regex
+    app_obj.middleware_stack = app_obj.build_middleware_stack()
 
 
 def _obtain_queue() -> tuple[object, bool]:
     """Return a queue instance and whether it uses the in-memory fallback."""
 
     global _fallback_queue
+    settings = _settings()
     preferred_backend = getattr(settings, "queue_backend", "auto")
     if preferred_backend == "memory":
         if _fallback_queue is None:
@@ -346,6 +401,8 @@ if FastAPI is not None:
         finally:
             setattr(app_obj.state, "storage_ready", False)
 
+    settings = _settings()
+
     app = FastAPI(
         title=settings.api_title,
         version=settings.api_version,
@@ -353,36 +410,7 @@ if FastAPI is not None:
         lifespan=_lifespan,
     )
     setattr(app.state, "spa_protected_prefixes", API_ROUTE_PREFIXES)
-    cors_kwargs: Dict[str, Any] | None = None
-    origin_regex = getattr(settings, "frontend_origin_regex", None)
-    if origin_regex:
-        cors_kwargs = {
-            "allow_origin_regex": origin_regex,
-            "allow_credentials": True,
-            "allow_methods": ["*"],
-            "allow_headers": ["*"],
-        }
-    else:
-        frontend_origin = getattr(settings, "frontend_origin", None)
-        if frontend_origin:
-            origins = [item.strip() for item in frontend_origin.split(",") if item.strip()]
-            if origins:
-                if origins == ["*"]:
-                    cors_kwargs = {
-                        "allow_origins": ["*"],
-                        "allow_credentials": False,
-                        "allow_methods": ["*"],
-                        "allow_headers": ["*"],
-                    }
-                else:
-                    cors_kwargs = {
-                        "allow_origins": origins,
-                        "allow_credentials": True,
-                        "allow_methods": ["*"],
-                        "allow_headers": ["*"],
-                    }
-    if cors_kwargs:
-        app.add_middleware(CORSMiddleware, **cors_kwargs)
+    _configure_cors(app, settings)
     metrics_enabled = False
     instrumentator_module = getattr(Instrumentator, "__module__", "")
     if "prometheus_fastapi_instrumentator" in instrumentator_module:
@@ -399,9 +427,21 @@ if FastAPI is not None:
     if metrics_enabled:
         setattr(app.state, "spa_protected_prefixes", API_ROUTE_PREFIXES + ("metrics",))
 
-API_ERRORS = Counter("api_errors_total", "Total API errors", namespace=settings.prometheus_namespace)
-QUEUE_LENGTH = Gauge("queue_length", "Number of queued transcription jobs", namespace=settings.prometheus_namespace)
-GPU_USAGE = Gauge("gpu_memory_usage_bytes", "Approximate GPU memory usage", namespace=settings.prometheus_namespace)
+API_ERRORS = Counter(
+    "api_errors_total",
+    "Total API errors",
+    namespace=_settings().prometheus_namespace,
+)
+QUEUE_LENGTH = Gauge(
+    "queue_length",
+    "Number of queued transcription jobs",
+    namespace=_settings().prometheus_namespace,
+)
+GPU_USAGE = Gauge(
+    "gpu_memory_usage_bytes",
+    "Approximate GPU memory usage",
+    namespace=_settings().prometheus_namespace,
+)
 
 
 def _sample_gpu_usage() -> None:
@@ -491,6 +531,7 @@ async def _stream_job(
     *,
     expected_user_id: int | None = None,
 ) -> AsyncGenerator[Dict[str, str], None]:
+    settings = _settings()
     if redis is not None:
         queue = Queue(name=settings.rq_default_queue, connection=redis)  # type: ignore[call-arg]
     else:
@@ -867,7 +908,10 @@ if app is not None:
         "/transcripts",
         response_model=List[TranscriptSummary],
         summary="Listar transcripciones",
-        description="Devuelve las transcripciones del usuario autenticado con filtros opcionales por estado y búsqueda.",
+        description=(
+            "Devuelve las transcripciones del usuario autenticado con filtros opcionales por "
+            "estado y búsqueda."
+        ),
         tags=["Transcripciones"],
         responses={
             200: {"description": "Listado recuperado"},
@@ -914,7 +958,11 @@ if app is not None:
         transcript_id: int, user: AuthenticatedUser = Depends(get_current_user)
     ) -> TranscriptDetail:
         with session_scope() as session:
-            transcript = session.query(Transcript).filter(Transcript.id == transcript_id, Transcript.user_id == user.id).one_or_none()
+            transcript = (
+                session.query(Transcript)
+                .filter(Transcript.id == transcript_id, Transcript.user_id == user.id)
+                .one_or_none()
+            )
             if transcript is None:
                 raise HTTPException(status_code=404, detail="Transcript not found")
         return _transcript_to_detail(transcript)
@@ -1060,7 +1108,11 @@ if app is not None:
         user: AuthenticatedUser = Depends(get_current_user),
     ) -> ResponseType:
         with session_scope() as session:
-            transcript = session.query(Transcript).filter(Transcript.id == transcript_id, Transcript.user_id == user.id).one_or_none()
+            transcript = (
+                session.query(Transcript)
+                .filter(Transcript.id == transcript_id, Transcript.user_id == user.id)
+                .one_or_none()
+            )
             if transcript is None or not transcript.transcript_key:
                 raise HTTPException(status_code=404, detail="Transcript not found")
         storage = S3StorageClient()
@@ -1071,7 +1123,10 @@ if app is not None:
         media_type = "text/plain"
         if format == "md":
             header = f"# {transcript.title or 'Transcripción'}\n\n"
-            details = f"- Idioma: {transcript.language or 'desconocido'}\n- Perfil: {transcript.quality_profile or 'n/a'}\n\n"
+            details = (
+                f"- Idioma: {transcript.language or 'desconocido'}\n"
+                f"- Perfil: {transcript.quality_profile or 'n/a'}\n\n"
+            )
             content = header + details + content
         elif format == "srt":
             detail = _transcript_to_detail(transcript, include_url=False)
@@ -1102,7 +1157,11 @@ if app is not None:
         if payload.destination not in allowed_destinations:
             raise HTTPException(status_code=400, detail="Unsupported destination")
         with session_scope() as session:
-            transcript = session.query(Transcript).filter(Transcript.id == transcript_id, Transcript.user_id == user.id).one_or_none()
+            transcript = (
+                session.query(Transcript)
+                .filter(Transcript.id == transcript_id, Transcript.user_id == user.id)
+                .one_or_none()
+            )
             if transcript is None:
                 raise HTTPException(status_code=404, detail="Transcript not found")
         logger.info(
@@ -1178,6 +1237,7 @@ if app is not None:
         responses={200: {"description": "Configuración actual"}},
     )
     async def get_config() -> AppConfigResponse:
+        settings = _settings()
         storage = S3StorageClient()
         storage_mode = "local" if getattr(storage, "_local_mode", False) else "remote"
         metrics_enabled = False
@@ -1226,8 +1286,16 @@ if app is not None:
                     raise HTTPException(status_code=404, detail="Not Found")
         return _spa_index()
 
+    if FRONTEND_DIST.exists():
+        app.mount(
+            "/",
+            StaticFiles(directory=FRONTEND_DIST, html=True, check_dir=False),
+            name="frontend-dist",
+        )
+
 
 def create_app() -> FastAPIApp:
     if app is None:
         raise RuntimeError("FastAPI is not available")
+    _configure_cors(app, _settings())
     return app

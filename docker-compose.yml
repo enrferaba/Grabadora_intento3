@@ -1,87 +1,136 @@
-version: "3.9"
+x-default-env-file: &default-env-file
+  - ${GRABADORA_ENV_FILE:-.env.example}
 
 services:
   api:
     build: .
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    env_file: *default-env-file
     environment:
-      - GRABADORA_REDIS_URL=redis://redis:6379/0
-      - GRABADORA_DATABASE_URL=postgresql+psycopg2://postgres:postgres@db:5432/grabadora
-      - GRABADORA_S3_ENDPOINT_URL=http://minio:9000
-      - GRABADORA_S3_ACCESS_KEY=minioadmin
-      - GRABADORA_S3_SECRET_KEY=minioadmin
-      - GRABADORA_S3_BUCKET_AUDIO=audio
-      - GRABADORA_S3_BUCKET_TRANSCRIPTS=transcripts
+      PYTHONUNBUFFERED: "1"
     volumes:
       - ./:/app
     ports:
       - "8000:8000"
     depends_on:
-      - redis
-      - db
-      - minio
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              capabilities: [gpu]
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')\""]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
   worker:
     build: .
-    command: python -m rq worker transcription --url redis://redis:6379/0
-    environment:
-      - GRABADORA_REDIS_URL=redis://redis:6379/0
-      - GRABADORA_DATABASE_URL=postgresql+psycopg2://postgres:postgres@db:5432/grabadora
-      - GRABADORA_S3_ENDPOINT_URL=http://minio:9000
-      - GRABADORA_S3_ACCESS_KEY=minioadmin
-      - GRABADORA_S3_SECRET_KEY=minioadmin
-      - GRABADORA_S3_BUCKET_AUDIO=audio
-      - GRABADORA_S3_BUCKET_TRANSCRIPTS=transcripts
+    command: python -m rq worker transcription --url ${GRABADORA_REDIS_URL:-redis://redis:6379/0}
+    env_file: *default-env-file
     volumes:
       - ./:/app
     depends_on:
-      - redis
-      - db
-      - minio
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              capabilities: [gpu]
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    profiles:
+      - queue
+
+  frontend:
+    image: node:20-alpine
+    working_dir: /app
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
+    environment:
+      - VITE_API_BASE=http://localhost:8000
+      - VITE_API_PROXY_TARGET=http://api:8000
+    volumes:
+      - ./frontend:/app
+    ports:
+      - "5173:5173"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://localhost:5173/__vite_ping').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+
   redis:
     image: redis:7
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   db:
     image: postgres:15
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=grabadora
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: grabadora
     ports:
       - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   minio:
     image: minio/minio:latest
     environment:
-      - MINIO_ROOT_USER=minioadmin
-      - MINIO_ROOT_PASSWORD=minioadmin
+      MINIO_ROOT_USER: ${GRABADORA_S3_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${GRABADORA_S3_SECRET_KEY:-minioadmin}
     command: server /data --console-address :9001
     ports:
       - "9000:9000"
       - "9001:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/ready || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
   prometheus:
     image: prom/prometheus:latest
     volumes:
       - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports:
       - "9090:9090"
+    profiles:
+      - observability
+
   grafana:
     image: grafana/grafana:latest
     environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
     volumes:
       - ./deploy/grafana:/var/lib/grafana
     ports:
       - "3000:3000"
+    depends_on:
+      prometheus:
+        condition: service_started
+    profiles:
+      - observability
+
+volumes:
+  minio-data:

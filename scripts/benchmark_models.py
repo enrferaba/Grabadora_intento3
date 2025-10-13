@@ -80,7 +80,6 @@ def print_table(metrics: dict[str, dict[str, float]]) -> None:
         avg_duration = values.get('avg_duration') or 0.0
         avg_runtime = values.get('avg_runtime') or 0.0
         avg_chars = values.get('avg_chars') or 0.0
-        throughput = values.get('throughput') or 0.0
         chars_per_second = (avg_chars / avg_runtime) if avg_runtime else 0.0
         rtf = values.get('rtf') or 0.0
         print(
