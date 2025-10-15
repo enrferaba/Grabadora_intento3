@@ -1,0 +1,45 @@
+nohup: ignoring input
+INFO:     Will watch for changes in these directories: ['/mnt/c/Users/enfea/Downloads/grabadora1873173183/Grabadora_intento3-5/app', '/mnt/c/Users/enfea/Downloads/grabadora1873173183/Grabadora_intento3-5/storage', '/mnt/c/Users/enfea/Downloads/grabadora1873173183/Grabadora_intento3-5/taskqueue']
+ℹ️  No se encontró GRABADORA_JWT_SECRET_KEY; se generó uno temporal.
+   • Se guardó un nuevo GRABADORA_JWT_SECRET_KEY en .env
+   • Base de datos SQLite inicializada en sqlite:////mnt/c/Users/enfea/Downloads/grabadora1873173183/Grabadora_intento3-5/grabadora.db
+
+🚀 Ejecutando plataforma en modo: local
+   • Cola en memoria y base de datos SQLite local
+
+ℹ️  Endpoints disponibles:
+   • SPA: http://0.0.0.0:8000/
+   • API interactiva: http://0.0.0.0:8000/docs
+   • Métricas Prometheus: http://0.0.0.0:8000/metrics
+{"extra": {"namespace": "grabadora"}, "event": "Prometheus instrumentator version does not accept a namespace argument; using default namespace", "timestamp": "2025-10-13T23:02:23.505268Z", "level": "info"}
+{"extra": {"endpoint": "/metrics"}, "event": "Prometheus instrumentation enabled", "timestamp": "2025-10-13T23:02:23.505847Z", "level": "info"}
+INFO:     Started server process [382]
+INFO:     Waiting for application startup.
+{"event": "Storage buckets verified on startup", "timestamp": "2025-10-13T23:02:28.258597Z", "level": "info"}
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:50502 - "GET /cuenta?mode=login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50502 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50502 - "POST /auth/signup HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:50502 - "POST /auth/token HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50522 - "GET /config HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50502 - "GET /transcripts HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50522 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50506 - "GET /profiles HTTP/1.1" 200 OK
+WARNING:services.transcription:Reduciendo modelo a 'small' en CPU para evitar falta de memoria
+{"extra": {"job_id": "d712beaa-1f5b-44b6-922c-c54eee2a0922", "audio_key": "2/9d5eb109-dd01-4f39-8a33-092856b0ce60-Clase 7 Consti.m4a", "user_id": 2, "quality_profile": "balanced", "meta": {"diarization": false, "word_timestamps": true}, "queue_backend": "memory"}, "event": "Queued transcription job", "timestamp": "2025-10-13T23:03:01.195574Z", "level": "info"}
+INFO:     127.0.0.1:50506 - "POST /transcribe HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50506 - "GET /transcribe/d712beaa-1f5b-44b6-922c-c54eee2a0922 HTTP/1.1" 200 OK
+INFO:services.transcription:Loading faster-whisper model
+INFO:faster_whisper:Processing audio with duration 29:53.161
+{"extra": {"job_id": "d712beaa-1f5b-44b6-922c-c54eee2a0922", "user_id": 2}, "event": "SSE stream cancelled", "timestamp": "2025-10-13T23:03:07.392778Z", "level": "info"}
+INFO:     127.0.0.1:48346 - "GET /favicon.ico HTTP/1.1" 200 OK
+WARNING:services.transcription:Reduciendo modelo a 'small' en CPU para evitar falta de memoria
+{"extra": {"job_id": "e0b9c4ce-188f-4cfe-bc40-1e709c47dda9", "audio_key": "2/d8c45da6-a281-4a92-823e-e44360e6624d-Clase 7 Consti (1).m4a", "user_id": 2, "quality_profile": "balanced", "meta": {"diarization": false, "word_timestamps": true}, "queue_backend": "memory"}, "event": "Queued transcription job", "timestamp": "2025-10-13T23:03:25.053330Z", "level": "info"}
+INFO:     127.0.0.1:50338 - "POST /transcribe HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50338 - "GET /transcribe/e0b9c4ce-188f-4cfe-bc40-1e709c47dda9 HTTP/1.1" 200 OK
+INFO:services.transcription:Loading faster-whisper model
+INFO:faster_whisper:Processing audio with duration 29:53.161
+INFO:     127.0.0.1:50352 - "GET /transcribir HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50352 - "GET /assets/index-D42zU74A.css HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50352 - "GET /assets/index-RA9scyAP.js.map HTTP/1.1" 200 OK

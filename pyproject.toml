@@ -1,0 +1,58 @@
+[tool.poetry]
+name = "grabadora-intento3"
+version = "0.1.0"
+description = "Streaming transcription platform"
+authors = ["Grabadora Bot <bot@example.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = "0.119.0"
+starlette = "0.48.0"
+uvicorn = {extras = ["standard"], version = "0.30.1"}
+redis = "^5.0.4"
+rq = "^1.16.2"
+boto3 = "^1.34.0"
+psycopg2-binary = "^2.9.9"
+SQLAlchemy = "^2.0.29"
+python-multipart = "0.0.20"
+prometheus-client = "^0.20.0"
+prometheus-fastapi-instrumentator = "^6.0.0"
+pydantic = "2.12.0"
+sse-starlette = "3.0.0"
+python-dotenv = "^1.0.1"
+typing-extensions = "^4.14.1"
+structlog = "^24.2.0"
+
+[tool.poetry.group.ml]
+optional = true
+
+[tool.poetry.group.ml.dependencies]
+faster-whisper = "^0.10.0"
+ctranslate2 = "^4.5.0"
+torch = "^2.5.1"
+torchaudio = "^2.5.1"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.2.0"
+pytest-asyncio = "^0.23.0"
+black = "^24.4.2"
+ruff = "^0.4.4"
+
+[tool.black]
+line-length = 120
+target-version = ["py311"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+ignore = []
+
+[tool.ruff.format]
+docstring-code-format = true
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

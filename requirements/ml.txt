@@ -1,0 +1,6 @@
+# GPU/CPU intensive speech recognition stack.
+# Export PIP_PREFER_BINARY=1 before installing to avoid compiling PyAV.
+faster-whisper==0.10.0
+ctranslate2==4.5.0
+torchaudio==2.5.1
+torch==2.5.1
